@@ -1,0 +1,2340 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>더콕배드민턴</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap');
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: #e7e9ee; }
+  body { font-family: 'Noto Sans KR', system-ui, -apple-system, 'Apple SD Gothic Neo', sans-serif; color: #0f172a; }
+
+  #appRoot { max-width: 480px; margin: 0 auto; min-height: 100vh; background: #f8fafc; position: relative; padding-bottom: 84px; box-shadow: 0 0 40px rgba(15,23,42,0.08); }
+
+  .sticky-top-wrap { position: sticky; top: 0; z-index: 30; background: #fff; }
+  .topbar { background: #fff; border-bottom: 1px solid #e2e8f0; padding: 14px 18px 12px 18px; }
+  .brand-row { display: flex; align-items: center; justify-content: space-between; }
+  .brand { font-size: 16px; font-weight: 800; color: #0f172a; letter-spacing: -0.01em; }
+  .role-badge { font-size: 11px; font-weight: 700; padding: 5px 11px; border-radius: 8px; background: #f1f5f9; color: #475569; display: flex; align-items: center; gap: 8px; }
+  .role-badge .logout { color: #94a3b8; cursor: pointer; }
+
+  .status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; border: 1px solid; white-space: nowrap; }
+  .st-scheduled { color: #1d4ed8; background: #eff6ff; border-color: #bfdbfe; }
+  .st-attended { color: #15803d; background: #f0fdf4; border-color: #bbf7d0; }
+  .st-absent { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
+  .st-makeup_scheduled { color: #c2410c; background: #fff7ed; border-color: #fed7aa; }
+  .st-makeup_completed { color: #0f766e; background: #f0fdfa; border-color: #99f6e4; }
+  .st-cancelled { color: #475569; background: #f1f5f9; border-color: #cbd5e1; }
+
+  .cap-badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: #f1f5f9; color: #475569; white-space: nowrap; }
+  .cap-warn { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+  .m-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px; }
+  .m-card + .m-card { margin-top: 8px; }
+  .row-label { font-size: 12px; color: #94a3b8; font-weight: 600; }
+  .row-value { font-size: 13px; color: #0f172a; font-weight: 700; }
+  .chip-select { padding: 8px 14px; border-radius: 10px; font-size: 12.5px; font-weight: 700; background: #f1f5f9; color: #475569; white-space: nowrap; cursor: pointer; user-select: none; border: none; }
+  .chip-select.on { background: #0f172a; color: #fff; }
+  .btn-primary { text-align: center; padding: 13px; border-radius: 12px; background: #0f172a; color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; user-select: none; }
+  .btn-primary:active { opacity: .85; }
+  .btn-primary.disabled { background: #cbd5e1; cursor: default; }
+  .btn-secondary { text-align: center; padding: 12px; border-radius: 12px; background: #f1f5f9; color: #334155; font-size: 13px; font-weight: 700; cursor: pointer; user-select: none; border: 1px solid #e2e8f0; }
+  .avail-pill { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  .gauge { height: 6px; border-radius: 999px; background: #eef0f4; overflow: hidden; flex: 1; }
+  .gauge > div { height: 100%; border-radius: 999px; }
+  .day-chip { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; padding: 8px 0; border-radius: 12px; cursor: pointer; user-select: none; }
+  .step-dot { width: 7px; height: 7px; border-radius: 50%; background: #e2e8f0; display: inline-block; }
+  .step-dot.done { background: #4f46e5; }
+  .choice-card { border: 2px solid #e2e8f0; border-radius: 14px; padding: 14px; display: flex; gap: 12px; align-items: flex-start; cursor: pointer; user-select: none; }
+  .choice-card.picked { border-color: #4f46e5; background: #eef0ff; }
+  .fab { position: fixed; left: 50%; transform: translateX(200px) translateX(-70px); bottom: 96px; width: 52px; height: 52px; border-radius: 16px; background: #0f172a; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 24px rgba(15,23,42,0.28); cursor: pointer; z-index: 25; }
+  @media (max-width: 480px) { .fab { transform: translateX(-1px); left: auto; right: 18px; } }
+
+  .m-bottomnav { position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: 480px; display: flex; background: #fff; border-top: 1px solid #e2e8f0; padding: 8px 4px calc(10px + env(safe-area-inset-bottom)) 4px; z-index: 30; }
+  .m-navitem { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10px; font-weight: 700; color: #94a3b8; cursor: pointer; user-select: none; padding: 4px 0; border: none; background: none; }
+  .m-navitem.active { color: #4f46e5; }
+
+  .sheet-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.45); z-index: 90; display: flex; align-items: flex-end; justify-content: center; }
+  .sheet { width: 100%; max-width: 480px; background: #fff; border-radius: 22px 22px 0 0; max-height: 88vh; overflow-y: auto; padding-bottom: 24px; }
+  .sheet-handle { width: 36px; height: 4px; border-radius: 999px; background: #e2e8f0; margin: 10px auto 6px auto; }
+  .sheet-close { position: absolute; top: 14px; right: 16px; width: 28px; height: 28px; border-radius: 8px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+
+  .stat-tile { background: #f8fafc; border: 1px solid #eef2f6; border-radius: 10px; padding: 10px 8px; text-align: center; }
+  input[type=text], input[type=tel], input[type=date], input[type=password], select { width: 100%; border: 1px solid #e2e8f0; border-radius: 10px; padding: 11px 13px; font-size: 14px; font-weight: 600; color: #0f172a; background: #fff; font-family: inherit; }
+  .field-label { font-size: 12px; font-weight: 700; color: #94a3b8; margin-bottom: 6px; }
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 100px; background: #0f172a; color: #fff; font-size: 13px; font-weight: 700; padding: 10px 18px; border-radius: 999px; z-index: 200; box-shadow: 0 10px 24px rgba(15,23,42,.3); max-width: 90%; text-align: center; }
+</style>
+</head>
+<body>
+<div id="appRoot"></div>
+<div id="modalLayer"></div>
+<div id="toastLayer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+/* ============================== Supabase 연결 ============================== */
+const SUPABASE_URL = 'https://kwlwxsjsczqotnwvrhpb.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_8zi5WSGipZDCHUpjVlN5Xg_oZx-qXje';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* ============================== 상수 / 아이콘 ============================== */
+const ICONS = {
+  clock: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>',
+  check: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>',
+  x: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="M6 6l12 12"></path></svg>',
+  refresh: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path><path d="M3 21v-5h5"></path></svg>',
+  ban: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="m5 5 14 14"></path></svg>',
+  warn: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>',
+  back: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0f172a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>',
+  chevL: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>',
+  chevR: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>',
+  plus: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>',
+  calendar: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M3 10h18"></path><path d="M8 2v4"></path><path d="M16 2v4"></path></svg>',
+  chart: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><rect x="7" y="12" width="3" height="6"></rect><rect x="12" y="8" width="3" height="10"></rect><rect x="17" y="5" width="3" height="13"></rect></svg>',
+  users: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
+  card: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><path d="M2 10h20"></path></svg>',
+  history: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"></path><path d="M3 3v6h6"></path><path d="M12 7v5l4 2"></path></svg>',
+  phone: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>',
+  ticket: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"></path><path d="M13 5v2"></path><path d="M13 17v2"></path><path d="M13 11v2"></path></svg>',
+  lock: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7e22ce" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>',
+  settings: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"></path></svg>'
+};
+const STATUS_LABEL = { scheduled:'예정', attended:'출석완료', absent:'결석', makeup_scheduled:'보강예정', makeup_completed:'보강완료', cancelled:'취소' };
+const WD = ['일','월','화','수','목','금','토'];
+const OPERATING_HOURS = ['06:00','07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00'];
+
+function pad(n){ return n<10 ? '0'+n : ''+n; }
+function toISO(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+function fromISO(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); }
+function addDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+function ym(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1); }
+function monthLabel(yearMonth){ const [y,m]=yearMonth.split('-'); return y+'년 '+parseInt(m)+'월'; }
+function addMonths(yearMonth, n){ let [y,m]=yearMonth.split('-').map(Number); m+=n; while(m>12){m-=12;y++;} while(m<1){m+=12;y--;} return y+'-'+pad(m); }
+function monthRange(yearMonth){ const [y,m]=yearMonth.split('-').map(Number); const start=new Date(y,m-1,1); const end=new Date(y,m,0); return [start,end]; }
+
+/* ============================== 행 <-> 상태 매핑 ============================== */
+function toCamelKey(k){ return k.replace(/_([a-z0-9])/g, (_,c)=>c.toUpperCase()); }
+function toSnakeKey(k){ return k.replace(/[A-Z]/g, c=>'_'+c.toLowerCase()); }
+function rowToCamel(row){ if(!row) return row; const o={}; Object.keys(row).forEach(k=>o[toCamelKey(k)]=row[k]); return o; }
+function objToSnakeRow(obj){ const o={}; Object.keys(obj).forEach(k=>o[toSnakeKey(k)]=obj[k]); return o; }
+function productRowToState(row){
+  return { id:row.id, name:row.name, price:row.price, mode:row.registration_mode,
+    ruleType: row.session_rule_type, ruleCount: row.session_rule_count,
+    capacity: row.capacity, validDays: row.pack_valid_days, status: row.status,
+    bundlePrice: row.bundle_price };
+}
+function templateRowToState(row){
+  const o = rowToCamel(row);
+  o.startTime = (row.start_time||'').slice(0,5);
+  o.endTime = (row.end_time||'').slice(0,5);
+  return o;
+}
+// 코트 배정 템플릿(classTemplates)이 실제로 덮는 시간대들(예: 17:00~22:00 → 17,18,19,20,21시)
+function templateHours(t){ return OPERATING_HOURS.filter(h=>h>=t.startTime && h<t.endTime); }
+function hourPlusOne(t){ const h = parseInt(t.slice(0,2)); return String(h+1).padStart(2,'0')+':00'; }
+// 같은 상품을 이미 듣고 있는 회원이 하나 더(주2회 등) 등록할 때, 두 슬롯 모두 정가로 기록하고
+// 번들 할인액만 따로 계산한다 (예: 12만원+12만원-2만원=22만원) — dukcok-app.html 데모와 동일한 규칙
+function computeBundleDiscount(memberId, productId){
+  const product = productById(productId);
+  if (!product || !product.bundlePrice) return 0;
+  const existing = STATE.slots.filter(s=>s.memberId===memberId && s.active && s.productId===productId);
+  if (existing.length!==1) return 0;
+  return Math.max(product.price*2 - product.bundlePrice, 0);
+}
+function slotRowToState(row){
+  return { id:row.id, memberId: row.member_id, weekday: row.weekday, time: (row.start_time||'').slice(0,5),
+    coachId: row.coach_id, productId: row.product_id, courtId: row.court_id,
+    active: row.status==='active', forceOverride: row.force_override };
+}
+function sessionRowToState(row){
+  const o = rowToCamel(row);
+  o.startTime = (row.start_time||'').slice(0,5);
+  return o;
+}
+
+/* ============================== 인증 / 세션 부트스트랩 ============================== */
+let STATE = null;
+let AUTH = { error:'', bootstrap:null, staffNames:null, selectedName:null };
+
+sb.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_OUT') { STATE = null; AUTH = { error:'', bootstrap:null, staffNames:null, selectedName:null }; showAuthScreen(); return; }
+  if (session && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED')) {
+    if (!STATE) loadAppData(session.user);
+  } else if (!session && event === 'INITIAL_SESSION') {
+    showAuthScreen();
+  }
+});
+
+async function logout(){ await sb.auth.signOut(); }
+
+// 로그인 화면을 띄우기 전에 "관리자 계정이 아직 하나도 없는지"부터 확인한다 —
+// 없으면 최초 1회 관리자 설정 화면을, 있으면 등록된 이름 탭을 눌러 들어가는 로그인 화면을 보여준다.
+async function showAuthScreen(){
+  if (AUTH.bootstrap === null) {
+    const { data } = await sb.rpc('staff_exists');
+    AUTH.bootstrap = !data;
+  }
+  if (!AUTH.bootstrap && !AUTH.staffNames) {
+    const { data } = await sb.rpc('list_staff_names');
+    AUTH.staffNames = (data||[]).map(r=>r.name);
+  }
+  renderAuthScreen();
+}
+
+async function submitBootstrapAdmin(){
+  const name = (document.getElementById('boot_name').value||'').trim();
+  const password = document.getElementById('boot_password').value||'';
+  if (!name || !password) { AUTH.error='이름과 비밀번호를 입력하세요'; renderAuthScreen(); return; }
+  if (password.length < 6) { AUTH.error='비밀번호는 6자 이상으로 해주세요'; renderAuthScreen(); return; }
+  AUTH.error = '';
+  const { data, error } = await sb.functions.invoke('create-coach', { body: { name, password } });
+  if (error || (data && data.error)) {
+    // 계정 생성 응답이 오류를 반환해도 실제로는 계정이 만들어진 경우가 있어(서버 함수 이슈),
+    // 이름으로 실제 로그인이 되는지 한 번 더 확인해본 뒤에만 진짜 실패로 처리한다.
+    const { data: fallbackEmail } = await sb.rpc('get_login_email_for_name', { p_name: name });
+    if (fallbackEmail) {
+      const { error: loginErr2 } = await sb.auth.signInWithPassword({ email: fallbackEmail, password });
+      if (!loginErr2) return;
+    }
+    AUTH.error = (data && data.error) || (error && error.message) || '설정 실패';
+    renderAuthScreen();
+    return;
+  }
+  const { error: loginErr } = await sb.auth.signInWithPassword({ email: data.email, password });
+  if (loginErr) { AUTH.error = '자동 로그인에 실패했습니다. 다시 시도해주세요'; renderAuthScreen(); }
+}
+
+function selectLoginName(n){ AUTH.selectedName = n; AUTH.error=''; renderAuthScreen(); }
+function backToNameSelect(){ AUTH.selectedName = null; AUTH.error=''; renderAuthScreen(); }
+
+async function submitLogin(){
+  const name = AUTH.selectedName;
+  const password = document.getElementById('login_password').value||'';
+  if (!password) { AUTH.error='비밀번호를 입력하세요'; renderAuthScreen(); return; }
+  AUTH.error = '';
+  const { data: email, error: rpcErr } = await sb.rpc('get_login_email_for_name', { p_name: name });
+  if (rpcErr || !email) { AUTH.error = '등록되지 않은 이름입니다'; renderAuthScreen(); return; }
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) { AUTH.error = '비밀번호가 올바르지 않습니다'; renderAuthScreen(); return; }
+}
+
+function renderAuthScreen(){
+  const root = document.getElementById('appRoot');
+  if (AUTH.bootstrap) {
+    root.innerHTML = `
+    <div style="min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:32px 24px;">
+      <div style="text-align:center;margin-bottom:28px;">
+        <img src="logo.png" alt="더콕배드민턴" style="width:180px;height:auto;" />
+        <div style="font-size:13px;color:#94a3b8;font-weight:600;margin-top:4px;">최초 관리자 계정 설정</div>
+      </div>
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 14px;margin-bottom:18px;font-size:12px;color:#1d4ed8;font-weight:600;line-height:1.6;">
+        아직 계정이 하나도 없습니다. 여기서 만드는 계정이 자동으로 관리자(운영자) 권한을 받습니다.
+      </div>
+      <div style="margin-bottom:12px;">
+        <div class="field-label">이름</div>
+        <input id="boot_name" type="text" placeholder="예: 김관리" />
+      </div>
+      <div style="margin-bottom:8px;">
+        <div class="field-label">비밀번호</div>
+        <input id="boot_password" type="password" placeholder="4자 이상" />
+      </div>
+      ${AUTH.error ? `<div style="color:#b91c1c;font-size:12px;font-weight:700;margin-bottom:8px;">${AUTH.error}</div>` : ''}
+      <div class="btn-primary" style="margin-top:10px;" onclick="submitBootstrapAdmin()">관리자 계정 만들기</div>
+    </div>`;
+    return;
+  }
+  if (!AUTH.selectedName) {
+    root.innerHTML = `
+    <div style="min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:32px 24px;">
+      <div style="text-align:center;margin-bottom:28px;">
+        <img src="logo.png" alt="더콕배드민턴" style="width:180px;height:auto;" />
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        ${(AUTH.staffNames||[]).map((n,i,arr)=>{
+          const isLastOdd = (arr.length % 2 === 1) && (i === arr.length-1);
+          return `<div class="chip-select" style="padding:16px 0;font-size:15px;text-align:center;${isLastOdd?'grid-column:1/-1;width:calc(50% - 5px);margin:0 auto;':''}" onclick="selectLoginName('${n}')">${n}</div>`;
+        }).join('')}
+      </div>
+      ${(AUTH.staffNames && AUTH.staffNames.length===0) ? `<div style="text-align:center;color:#94a3b8;font-size:13px;margin-top:16px;">등록된 계정이 없습니다.</div>` : ''}
+    </div>`;
+    return;
+  }
+  root.innerHTML = `
+  <div style="min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:32px 24px;">
+    <div style="margin-bottom:10px;">
+      <span onclick="backToNameSelect()" style="cursor:pointer;display:inline-flex;">${ICONS.back}</span>
+    </div>
+    <div style="text-align:center;margin-bottom:28px;">
+      <div style="font-size:22px;font-weight:800;">${AUTH.selectedName}</div>
+      <div style="font-size:13px;color:#94a3b8;font-weight:600;margin-top:4px;">비밀번호를 입력하세요</div>
+    </div>
+    <input id="login_password" type="password" placeholder="비밀번호" />
+    ${AUTH.error ? `<div style="color:#b91c1c;font-size:12px;font-weight:700;margin-top:8px;">${AUTH.error}</div>` : ''}
+    <div class="btn-primary" style="margin-top:14px;" onclick="submitLogin()">로그인</div>
+  </div>`;
+}
+
+async function loadAppData(user){
+  let staffRow = null;
+  for (let i=0;i<6 && !staffRow;i++){
+    const { data } = await sb.from('staff').select('*').eq('auth_user_id', user.id).maybeSingle();
+    if (data) staffRow = data; else await new Promise(r=>setTimeout(r,500));
+  }
+  if (!staffRow) { toast('계정 정보를 불러오지 못했습니다. 새로고침 해주세요.'); return; }
+
+  const today = new Date();
+  STATE = {
+    // dbRole: 실제 DB 권한(RLS 기준). role: 화면에 지금 뭘 보여줄지(코치 화면으로 항상 먼저 시작하고,
+    // dbRole이 owner인 사람만 "관리자" 버튼으로 본인 비밀번호를 다시 입력해 role을 owner로 바꿀 수 있다)
+    dbRole: staffRow.role, role: 'coach', myEmail: user.email,
+    myStaffId: staffRow.id, myName: staffRow.name,
+    tab: 'timetable', today: toISO(today),
+    weekStart: toISO(addDays(today, -today.getDay())),
+    selectedDate: toISO(today),
+    paymentMonth: addMonths(ym(today), 1),
+    reportMonth: ym(today),
+    availWeekday: today.getDay(),
+    staff: [], courts: [], products: [], members: [], slots: [], packages: [],
+    enrollments: [], sessions: [], logs: [], classTemplates: [],
+    enrollmentStatusBySlot: {}, packageStatusByMember: {}
+  };
+  try {
+    await refreshAllData();
+    render();
+  } catch(e) {
+    console.error(e);
+    toast('데이터를 불러오는 중 오류가 발생했습니다');
+  }
+}
+
+async function refreshAllData(){
+  const [staffRes, courtsRes, productsRes, membersRes, slotsRes, templatesRes] = await Promise.all([
+    sb.from('staff').select('*'),
+    sb.from('courts').select('*'),
+    sb.from('products').select('*'),
+    sb.from('members').select('*').neq('status','withdrawn'),
+    sb.from('member_slots').select('*').eq('status','active'),
+    sb.from('class_templates').select('*')
+  ]);
+  STATE.staff = (staffRes.data||[]).map(rowToCamel);
+  STATE.courts = (courtsRes.data||[]).map(rowToCamel);
+  STATE.products = (productsRes.data||[]).map(productRowToState);
+  STATE.members = (membersRes.data||[]).map(rowToCamel);
+  STATE.slots = (slotsRes.data||[]).map(slotRowToState);
+  STATE.classTemplates = (templatesRes.data||[]).map(templateRowToState);
+
+  const rangeStart = toISO(addDays(fromISO(STATE.today), -30));
+  const rangeEnd = toISO(addDays(fromISO(STATE.today), 90));
+  const sessionsRes = await sb.from('class_sessions').select('*').gte('date', rangeStart).lte('date', rangeEnd);
+  STATE.sessions = (sessionsRes.data||[]).map(sessionRowToState);
+
+  if (isOwner()) {
+    const [enrRes, pkgRes] = await Promise.all([
+      sb.from('monthly_enrollments').select('*'),
+      sb.from('lesson_packages').select('*')
+    ]);
+    STATE.enrollments = (enrRes.data||[]).map(rowToCamel);
+    STATE.packages = (pkgRes.data||[]).map(rowToCamel);
+    await fetchLogs();
+  } else {
+    const thisMonth = ym(fromISO(STATE.today));
+    const [byslotRes, pkgBulkRes] = await Promise.all([
+      sb.rpc('enrollment_status_by_slot', { p_year_month: thisMonth }),
+      sb.rpc('package_status_bulk')
+    ]);
+    STATE.enrollmentStatusBySlot = { [thisMonth]: {} };
+    (byslotRes.data||[]).forEach(r=>{ STATE.enrollmentStatusBySlot[thisMonth][r.slot_id] = r.is_registered; });
+    STATE.packageStatusByMember = {};
+    (pkgBulkRes.data||[]).forEach(r=>{ STATE.packageStatusByMember[r.member_id] = { remainingSessions: r.remaining_sessions, totalSessions: r.total_sessions, pkgStatus: r.pkg_status, defaultCoachId: r.default_coach_id }; });
+  }
+}
+
+async function fetchLogs(){
+  const { data } = await sb.from('change_logs')
+    .select('id, actor_role, note, created_at, staff:actor_id(name), members:member_id(name)')
+    .order('created_at', { ascending:false }).limit(200);
+  STATE.logs = (data||[]).map(r=>({
+    id:r.id, actorName: (r.staff&&r.staff.name)||'알수없음', actorRole:r.actor_role,
+    memberName: (r.members&&r.members.name)||'', text:r.note, createdAt:(r.created_at||'').replace('T',' ').slice(0,16)
+  }));
+}
+
+async function refreshMemberSessions(memberId){
+  const { data } = await sb.from('class_sessions').select('*').eq('member_id', memberId);
+  const others = STATE.sessions.filter(s=>s.memberId!==memberId);
+  STATE.sessions = others.concat((data||[]).map(sessionRowToState));
+}
+async function refreshEnrollments(){
+  const { data } = await sb.from('monthly_enrollments').select('*');
+  STATE.enrollments = (data||[]).map(rowToCamel);
+}
+async function refreshPackages(){
+  const { data } = await sb.from('lesson_packages').select('*');
+  STATE.packages = (data||[]).map(rowToCamel);
+}
+
+function toast(msg){
+  const el = document.createElement('div'); el.className='toast'; el.textContent = msg;
+  document.getElementById('toastLayer').appendChild(el);
+  setTimeout(()=>el.remove(), 2600);
+}
+
+/* ============================== 조회 헬퍼 ============================== */
+function memberById(id){ return STATE.members.find(m=>m.id===id); }
+function staffById(id){ return STATE.staff.find(s=>s.id===id); }
+function courtById(id){ return STATE.courts.find(c=>c.id===id); }
+function productById(id){ return STATE.products.find(p=>p.id===id); }
+function sessionById(id){ return STATE.sessions.find(s=>s.id===id); }
+function slotById(id){ return STATE.slots.find(s=>s.id===id); }
+function slotsOfMember(memberId){ return STATE.slots.filter(s=>s.memberId===memberId && s.active); }
+function packageOfMember(memberId){ return STATE.packages.find(p=>p.memberId===memberId && p.status==='active'); }
+function sessionsOnDate(dateStr){ return STATE.sessions.filter(s=>s.date===dateStr).sort((a,b)=> a.startTime.localeCompare(b.startTime)); }
+function isOwner(){ return STATE.role==='owner'; }
+
+// 코치 화면은 결제 원본 테이블에 접근 권한이 없으므로(RLS), 로그인 시 미리 받아둔 안전한 요약값을 쓴다
+function getSlotPaidStatus(slotId, yearMonth){
+  if (isOwner()) {
+    const e = STATE.enrollments.find(x=>x.slotId===slotId && x.yearMonth===yearMonth);
+    return e ? e.paymentStatus==='paid' : false;
+  }
+  return !!(STATE.enrollmentStatusBySlot[yearMonth] && STATE.enrollmentStatusBySlot[yearMonth][slotId]);
+}
+function memberHasPackage(memberId){
+  if (isOwner()) return !!packageOfMember(memberId);
+  return !!STATE.packageStatusByMember[memberId];
+}
+function getPackageDisplay(memberId){
+  if (isOwner()) {
+    const p = packageOfMember(memberId);
+    return p ? { total:p.totalSessions, used:p.usedSessions, remaining:p.totalSessions-p.usedSessions, coachId:p.defaultCoachId, purchasedAt:p.purchasedAt, amount:p.paymentAmount, method:p.paymentMethod } : null;
+  }
+  const r = STATE.packageStatusByMember[memberId];
+  return r ? { total:r.totalSessions, used:r.totalSessions-r.remainingSessions, remaining:r.remainingSessions, coachId:r.defaultCoachId } : null;
+}
+
+async function addLog(memberId, memberName, text){
+  const entry = { id:'tmp_'+Math.random().toString(36).slice(2), actorName: STATE.myName, actorRole: STATE.role,
+    memberName: memberName||'', text, createdAt: new Date().toISOString().replace('T',' ').slice(0,16) };
+  if (STATE.logs) STATE.logs.unshift(entry);
+  try {
+    await sb.from('change_logs').insert({ actor_id: STATE.myStaffId, actor_role: STATE.role, member_id: memberId||null, action_type:'action', note: text });
+  } catch(e){ console.error('log insert failed', e); }
+}
+
+/* ============================== 자동생성 (결제완료 → 시간표 생성) ============================== */
+async function completeMonthlyPayment(enrollmentId, amount, method, cardCompany){
+  const enr = STATE.enrollments.find(e=>e.id===enrollmentId);
+  if (!enr) return;
+  const { data, error } = await sb.rpc('complete_monthly_payment', { p_enrollment_id: enrollmentId, p_amount: amount, p_method: method, p_card_company: cardCompany||null });
+  if (error) { toast('처리 실패: '+error.message); return; }
+  await refreshEnrollments();
+  await refreshMemberSessions(enr.memberId);
+  const m = memberById(enr.memberId);
+  const already = data === 0;
+  await addLog(m.id, m.name, `${enr.yearMonth} 결제완료 처리(${amount.toLocaleString()}원)${already?' (이미 생성된 등록)':' → 해당 월 수업 자동생성'}`);
+  render();
+  toast(already ? '이미 처리된 등록입니다' : `${m.name} 회원 ${monthLabel(enr.yearMonth)} 수업이 자동 생성되었습니다`);
+}
+
+/* ---------- 입금 확인 시 실제 결제수단·카드사를 골라 기록 ---------- */
+const CARD_COMPANIES = ['국민카드','신한카드','삼성카드','현대카드','우리카드','하나카드','롯데카드','농협카드','기타'];
+function openConfirmPaymentPicker(enrollmentId, amount, defaultMethod, defaultCardCompany){
+  STATE._confirmPay = { enrollmentId, amount, method: defaultMethod || '계좌이체', cardCompany: defaultCardCompany || '' };
+  renderConfirmPaymentPicker();
+}
+function setConfirmPayMethod(m){ STATE._confirmPay.method = m; if (m!=='카드') STATE._confirmPay.cardCompany=''; renderConfirmPaymentPicker(); }
+function setConfirmPayCardCompany(v){ STATE._confirmPay.cardCompany = v; }
+function renderConfirmPaymentPicker(){
+  const cp = STATE._confirmPay;
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px;">입금 확인</div>
+    <div style="font-size:12px;color:#94a3b8;font-weight:600;margin-bottom:14px;">${cp.amount.toLocaleString()}원 · 실제 들어온 방식을 선택하세요</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <div class="chip-select ${cp.method==='계좌이체'?'on':''}" onclick="setConfirmPayMethod('계좌이체')">계좌이체</div>
+      <div class="chip-select ${cp.method==='카드'?'on':''}" onclick="setConfirmPayMethod('카드')">카드결제</div>
+      <div class="chip-select ${cp.method==='현장결제'?'on':''}" onclick="setConfirmPayMethod('현장결제')">현장결제</div>
+    </div>
+    ${cp.method==='카드' ? `
+    <div class="field-label" style="margin-top:14px;">카드사</div>
+    <select onchange="setConfirmPayCardCompany(this.value)">
+      <option value="">선택 안함</option>
+      ${CARD_COMPANIES.map(c=>`<option value="${c}" ${cp.cardCompany===c?'selected':''}>${c}</option>`).join('')}
+    </select>` : ''}
+    <div class="btn-primary" style="margin-top:18px;" onclick="confirmPaymentWithMethod()">입금완료 처리</div>
+  </div>`;
+  openModal(html);
+}
+async function confirmPaymentWithMethod(){
+  const cp = STATE._confirmPay;
+  await completeMonthlyPayment(cp.enrollmentId, cp.amount, cp.method, cp.method==='카드'?cp.cardCompany:null);
+  closeModal();
+}
+
+async function addMonthlySlot(memberId, weekday, time, coachId, productId, courtId){
+  const product = productById(productId);
+  const yearMonth = ym(fromISO(STATE.today));
+  const discount = computeBundleDiscount(memberId, productId);
+  const { error } = await sb.rpc('add_monthly_slot', {
+    p_member_id: memberId, p_weekday: weekday, p_start_time: time, p_coach_id: coachId,
+    p_product_id: productId, p_court_id: courtId, p_year_month: yearMonth, p_amount: product.price, p_method: '계좌이체',
+    p_discount: discount
+  });
+  if (error) { toast(error.message&&error.message.includes('court_conflict') ? '이 코트는 해당 요일·시간에 이미 다른 코치가 사용 중입니다' : '등록 실패: '+error.message); return; }
+  await refreshAllDataQuiet();
+  const m = memberById(memberId);
+  await addLog(memberId, m.name, `정규수업 추가 등록 · ${WD[weekday]} ${time} · ${staffById(coachId).name} · ${product.name}`);
+  closeModal(); render();
+  toast(`${m.name} 회원 ${monthLabel(yearMonth)} 수업이 자동 생성되었습니다`);
+}
+
+async function refreshAllDataQuiet(){
+  const [slotsRes] = await Promise.all([ sb.from('member_slots').select('*').eq('status','active') ]);
+  STATE.slots = (slotsRes.data||[]).map(slotRowToState);
+  await refreshEnrollments();
+  const rangeStart = toISO(addDays(fromISO(STATE.today), -30));
+  const rangeEnd = toISO(addDays(fromISO(STATE.today), 90));
+  const sessionsRes = await sb.from('class_sessions').select('*').gte('date', rangeStart).lte('date', rangeEnd);
+  STATE.sessions = (sessionsRes.data||[]).map(sessionRowToState);
+}
+
+async function purchasePackage(memberId, coachId, method){
+  const product = STATE.products.find(p=>p.mode==='session_pack');
+  const { data, error } = await sb.from('lesson_packages').insert(objToSnakeRow({
+    memberId, productId: product.id, defaultCoachId: coachId, totalSessions: product.ruleCount, usedSessions:0,
+    purchasedAt: STATE.today, status:'active', paymentAmount: product.price, paymentMethod: method, paymentDate: STATE.today, paidBy: STATE.myStaffId
+  })).select().single();
+  if (error) { toast('등록 실패: '+error.message); return null; }
+  const pkg = rowToCamel(data);
+  STATE.packages.push(pkg);
+  const m = memberById(memberId);
+  await addLog(memberId, m.name, `${product.name} 결제완료(${product.price.toLocaleString()}원) → 회차권 발급 (자동 시간표 생성 없음)`);
+  return pkg;
+}
+
+async function bookPackageSession(memberId, date, time, courtId){
+  const { error } = await sb.rpc('book_package_session', { p_member_id: memberId, p_date: date, p_start_time: time, p_court_id: courtId });
+  if (error) { toast('예약 실패: '+error.message); return; }
+  await refreshMemberSessions(memberId);
+  if (isOwner()) await refreshPackages();
+  const m = memberById(memberId);
+  const disp = getPackageDisplay(memberId);
+  await addLog(memberId, m.name, `개인레슨 세션 추가 예약 ${date} ${time}${disp?` (잔여 ${disp.remaining}회)`:''}`);
+  closeModal(); render();
+  toast('레슨이 예약되었습니다');
+}
+
+/* ============================== 상태 변경 액션 ============================== */
+async function setSessionStatus(sessionId, status){
+  const s = sessionById(sessionId); if (!s) return;
+  const before = STATUS_LABEL[s.status];
+  const { error } = await sb.from('class_sessions').update({ status }).eq('id', sessionId);
+  if (error) { toast('저장 실패'); return; }
+  s.status = status;
+  const m = memberById(s.memberId);
+  await addLog(m.id, m.name, `${s.date} ${s.startTime} 수업 ${before} → ${STATUS_LABEL[status]}`);
+  closeModal(); render();
+}
+
+async function confirmMakeup(absentSessionId, date, time, courtId, coachId){
+  const orig = sessionById(absentSessionId);
+  const finalCoachId = coachId || orig.coachId;
+  const { data, error } = await sb.from('class_sessions').insert(objToSnakeRow({
+    memberId: orig.memberId, date, startTime: time, coachId: finalCoachId, courtId,
+    enrollmentId: orig.enrollmentId, packageId: orig.packageId, originType:'makeup', status:'makeup_scheduled', linkedSessionId: orig.id
+  })).select().single();
+  if (error) { toast('보강 등록 실패: '+error.message); return; }
+  const makeup = sessionRowToState(data);
+  STATE.sessions.push(makeup);
+  await sb.from('class_sessions').update({ linked_session_id: makeup.id }).eq('id', orig.id);
+  orig.linkedSessionId = makeup.id;
+  const m = memberById(orig.memberId);
+  await addLog(m.id, m.name, `${orig.date} ${orig.startTime} 결석 → ${date} ${time} ${staffById(finalCoachId)?staffById(finalCoachId).name:''} 코치 보강으로 연결`);
+  render(); closeModal();
+  toast('보강이 등록되었습니다');
+}
+
+/* ---------- 시간표에서 빈자리에 다른 회원의 보강을 바로 채워넣기 ---------- */
+function openFillSlotPicker(date, time, courtId, coachId){
+  STATE._fillSlot = { date, time, courtId, coachId: coachId||null, query:'' };
+  renderFillSlotPicker();
+}
+function fillSlotResultsHtml(){
+  const f = STATE._fillSlot;
+  const q = (f.query||'').trim();
+  const results = q ? STATE.members.filter(m=>m.name.includes(q)).slice(0,20) : [];
+  return (q && results.length===0 ? `<div style="font-size:12px;color:#94a3b8;padding:8px 0;">일치하는 회원이 없습니다.</div>` : '')
+    + results.map(m=>`<div class="m-card" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;">
+        <span style="font-size:13px;font-weight:700;">${m.name}</span>
+        <span style="display:flex;align-items:center;gap:14px;">
+          <span style="font-size:11px;color:#64748b;font-weight:700;cursor:pointer;" onclick="closeModal();openMemberSheet('${m.id}')">회원정보보기</span>
+          <span style="font-size:11px;color:#4f46e5;font-weight:700;cursor:pointer;" onclick="fillSlotWithMember('${m.id}')">선택</span>
+        </span>
+      </div>`).join('');
+}
+function fillSlotSearch(el){
+  STATE._fillSlot.query = el.value;
+  const box = document.getElementById('fillSlotResults');
+  if (box) box.innerHTML = fillSlotResultsHtml();
+}
+function fillSlotSetCoach(coachId){ STATE._fillSlot.coachId = coachId; renderFillSlotPicker(); }
+function renderFillSlotPicker(){
+  const f = STATE._fillSlot;
+  const q = (f.query||'').trim();
+  const coaches = STATE.staff.filter(s=>s.role==='coach');
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px;">보강 회원 배정</div>
+    <div style="font-size:12px;color:#94a3b8;font-weight:600;margin-bottom:14px;">${f.date} ${f.time} · ${courtById(f.courtId)?courtById(f.courtId).name:''}</div>
+    ${!f.coachId ? `
+    <div class="field-label">담당 코치</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${coaches.map(c=>`<div class="chip-select" onclick="fillSlotSetCoach('${c.id}')">${c.name}</div>`).join('')}</div>
+    ` : `<div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:12px;">담당 코치: <b>${staffById(f.coachId)?staffById(f.coachId).name:'-'}</b> (변경하려면 <span style="color:#4f46e5;cursor:pointer;" onclick="fillSlotSetCoach(null)">여기</span>)</div>`}
+    <div class="field-label">회원 검색</div>
+    <input type="text" value="${q}" oninput="fillSlotSearch(this)" placeholder="이름으로 검색" />
+    <div id="fillSlotResults" style="margin-top:10px;display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;">
+      ${fillSlotResultsHtml()}
+    </div>
+  </div>`;
+  openModal(html);
+}
+async function fillSlotWithMember(memberId){
+  const f = STATE._fillSlot;
+  if (!f.coachId) { toast('담당 코치를 먼저 선택하세요'); return; }
+  const pendingAbsence = STATE.sessions.filter(s=>s.memberId===memberId && s.status==='absent' && !STATE.sessions.some(x=>x.linkedSessionId===s.id)).sort((a,b)=>b.date.localeCompare(a.date))[0];
+  const { data, error } = await sb.from('class_sessions').insert(objToSnakeRow({
+    memberId, date:f.date, startTime:f.time, coachId:f.coachId, courtId:f.courtId,
+    enrollmentId: pendingAbsence?pendingAbsence.enrollmentId:null, packageId:null, originType:'makeup', status:'makeup_scheduled',
+    linkedSessionId: pendingAbsence?pendingAbsence.id:null
+  })).select().single();
+  if (error) { toast('배정 실패: '+error.message); return; }
+  const session = sessionRowToState(data);
+  STATE.sessions.push(session);
+  if (pendingAbsence) { await sb.from('class_sessions').update({ linked_session_id: session.id }).eq('id', pendingAbsence.id); pendingAbsence.linkedSessionId = session.id; }
+  const m = memberById(memberId);
+  await addLog(memberId, m.name, `${f.date} ${f.time} ${courtById(f.courtId)?courtById(f.courtId).name+' ':''}보강으로 배정${pendingAbsence?` (${pendingAbsence.date} ${pendingAbsence.startTime} 결석 연결)`:''}`);
+  render(); closeModal();
+  toast(`${m.name} 회원이 보강으로 배정되었습니다`);
+}
+
+async function changeOnlyThisSession(sessionId, date, time, courtId, coachId){
+  const s = sessionById(sessionId);
+  const before = `${s.date} ${s.startTime} · ${staffById(s.coachId).name}`;
+  const { error } = await sb.from('class_sessions').update({ date, start_time: time, court_id: courtId, coach_id: coachId, origin_type:'manual' }).eq('id', sessionId);
+  if (error) { toast('저장 실패: '+error.message); return; }
+  s.date = date; s.startTime = time; s.courtId = courtId; s.coachId = coachId; s.originType = 'manual';
+  const m = memberById(s.memberId);
+  await addLog(m.id, m.name, `${before} 수업 → ${date} ${time} · ${staffById(coachId).name} (이번 수업만 변경)`);
+  render(); closeModal();
+  toast('이번 수업만 변경되었습니다');
+}
+
+async function updateSlotDefaults(slotId, weekday, time, coachId, courtId){
+  const slot = slotById(slotId);
+  const before = `${WD[slot.weekday]} ${slot.time} · ${staffById(slot.coachId).name}`;
+  const { error } = await sb.from('member_slots').update({ weekday, start_time: time, coach_id: coachId, court_id: courtId }).eq('id', slotId);
+  if (error) { toast('저장 실패: '+error.message); return; }
+  slot.weekday = weekday; slot.time = time; slot.coachId = coachId; slot.courtId = courtId;
+  const m = memberById(slot.memberId);
+  await addLog(m.id, m.name, `기본 수업시간 ${before} → ${WD[weekday]} ${time} · ${staffById(coachId).name} (영구 변경, 이미 생성된 수업은 유지)`);
+  render(); closeModal();
+  toast('기본 수업시간이 변경되었습니다');
+}
+
+async function createNewMember(payload){
+  const { data: newMember, error: mErr } = await sb.from('members').insert({ name: payload.name, phone: payload.phone, status:'active', memo:'' }).select().single();
+  if (mErr) { toast('회원 등록 실패: '+mErr.message); return; }
+  STATE.members.push(rowToCamel(newMember));
+  if (payload.mode==='monthly') {
+    await addMonthlySlotForNewMember(newMember.id, payload);
+    toast(payload.paid ? `${payload.name} 회원이 등록되었습니다` : `${payload.name} 회원이 가등록되었습니다 (자리만 우선 배정됨)`);
+  } else {
+    const pkg = await purchasePackage(newMember.id, payload.coachId, payload.method);
+    if (pkg) { closeModal(); render(); }
+    toast(`${payload.name} 회원이 등록되었습니다`);
+  }
+}
+async function addMonthlySlotForNewMember(memberId, payload){
+  const discount = computeBundleDiscount(memberId, payload.productId);
+  const { error } = await sb.rpc('add_monthly_slot', {
+    p_member_id: memberId, p_weekday: payload.weekday, p_start_time: payload.time, p_coach_id: payload.coachId,
+    p_product_id: payload.productId, p_court_id: payload.courtId, p_year_month: payload.yearMonth, p_amount: payload.amount,
+    p_method: payload.paid ? payload.method : null,
+    p_discount: discount, p_card_company: (payload.paid && payload.method==='카드') ? payload.cardCompany||null : null,
+    p_expected_method: payload.paid?null:payload.method, p_expected_card_company: (!payload.paid && payload.method==='카드')?payload.cardCompany||null:null,
+    p_expected_received_by: payload.expectedReceivedBy||null, p_expected_transfer_name: payload.expectedTransferName||null
+  });
+  if (error) { toast(error.message&&error.message.includes('court_conflict') ? '이 코트는 해당 요일·시간에 이미 다른 코치가 사용 중입니다' : '등록 실패: '+error.message); return; }
+  await refreshAllDataQuiet();
+  closeModal(); render();
+}
+
+async function submitAddCoach(){
+  const name = document.getElementById('new_coach_name').value.trim();
+  const password = document.getElementById('new_coach_password').value||'';
+  if (!name || !password) { toast('이름과 비밀번호를 입력하세요'); return; }
+  if (password.length < 6) { toast('비밀번호는 6자 이상으로 해주세요'); return; }
+  const { data, error } = await sb.functions.invoke('create-coach', { body: { name, password } });
+  if (error || (data && data.error)) {
+    // create-coach가 오류를 반환해도 실제로 계정이 만들어졌을 수 있어(서버 함수 이슈), staff 목록에 이름이
+    // 실제로 잡혔는지 확인해본 뒤에만 진짜 실패로 처리한다.
+    const { data: fallbackEmail } = await sb.rpc('get_login_email_for_name', { p_name: name });
+    if (!fallbackEmail) { toast('추가 실패: '+((data&&data.error)||error?.message||'')); return; }
+  }
+  await refreshAllData();
+  closeModal(); render();
+  toast(`${name} 코치 계정이 생성되었습니다 — 이름 "${name}" + 설정한 비밀번호로 로그인하면 됩니다`);
+}
+async function submitAddCourt(){
+  const name = document.getElementById('new_court_name').value.trim();
+  if (!name) { toast('코트 이름을 입력하세요'); return; }
+  const { data, error } = await sb.from('courts').insert({ name }).select().single();
+  if (error) { toast('추가 실패: '+error.message); return; }
+  STATE.courts.push(rowToCamel(data));
+  await addLog(null, '', `코트 추가: ${name}`);
+  closeModal(); render();
+  toast(`${name}가 추가되었습니다`);
+}
+async function submitAddProduct(){
+  const p = STATE._newProduct;
+  const name = (p.name||'').trim();
+  const price = parseInt(p.price)||0;
+  const capacity = parseInt(p.capacity)||1;
+  const ruleCount = parseInt(p.ruleCount)||1;
+  if (!name) { toast('상품명을 입력하세요'); return; }
+  let payload;
+  if (p.mode==='monthly') payload = { name, price, registration_mode:'monthly', session_rule_type:'fixed_count', session_rule_count: ruleCount, capacity };
+  else payload = { name, price, registration_mode:'session_pack', session_rule_count: ruleCount, capacity, pack_valid_days: parseInt(p.validDays)||90 };
+  const { data, error } = await sb.from('products').insert(payload).select().single();
+  if (error) { toast('추가 실패: '+error.message); return; }
+  STATE.products.push(productRowToState(data));
+  await addLog(null, '', `수강상품 추가: ${name}`);
+  closeModal(); render();
+  toast(`${name} 상품이 추가되었습니다`);
+}
+
+/* ============================== 잔여석 계산 ============================== */
+function availabilityForWeekday(weekday){
+  const rows = [];
+  const grouped = {};
+  // 관리자가 미리 배정해둔 코트배정 템플릿을 먼저 0명으로 깔아, 회원이 하나도 없어도
+  // "이 코치가 이 코트/시간에 이 상품을 한다"가 바로 보이게 한다.
+  STATE.classTemplates.filter(t=>t.weekday===weekday).forEach(t=>{
+    templateHours(t).forEach(h=>{
+      const key = h+'|'+t.courtId+'|'+t.coachId+'|'+t.productId;
+      grouped[key] = (grouped[key]||0)+0;
+    });
+  });
+  STATE.slots.filter(s=>s.weekday===weekday && s.active).forEach(s=>{
+    const key = s.time+'|'+s.courtId+'|'+s.coachId+'|'+s.productId;
+    grouped[key] = (grouped[key]||0)+1;
+  });
+  Object.keys(grouped).forEach(key=>{
+    const [time,courtId,coachId,productId] = key.split('|');
+    const used = grouped[key];
+    const product = productById(productId);
+    if (!product) return;
+    const remaining = product.capacity - used;
+    rows.push({time, courtId, coachId, productId, used, capacity: product.capacity, remaining});
+  });
+  rows.sort((a,b)=> a.time.localeCompare(b.time));
+  return rows;
+}
+function availLabel(remaining){
+  if (remaining <= 0) return {text:'마감', bg:'#fef2f2', color:'#b91c1c'};
+  if (remaining === 1) return {text:'마감임박', bg:'#fffbeb', color:'#b45309'};
+  return {text:'여유', bg:'#f0fdf4', color:'#15803d'};
+}
+
+/* ============================== 렌더링 ============================== */
+function render(){
+  const root = document.getElementById('appRoot');
+  const stickyExtra = STATE.tab==='timetable' ? timetableHeaderHtml() : '';
+  root.innerHTML = '<div class="sticky-top-wrap">' + topbarHtml() + stickyExtra + '</div>'
+    + '<div id="mainView">' + viewHtml() + '</div>' + bottomNavHtml() + fabHtml();
+}
+
+function topbarHtml(){
+  const canAdmin = STATE.dbRole === 'owner';
+  return `
+  <div class="topbar">
+    <div class="brand-row">
+      <div class="brand">더콕배드민턴</div>
+      <div class="role-badge">
+        ${STATE.myName}
+        <span class="logout" onclick="logout()">로그아웃</span>
+      </div>
+    </div>
+    ${canAdmin ? `
+    <div style="display:flex;gap:6px;margin-top:10px;">
+      <div class="chip-select ${!isOwner()?'on':''}" onclick="setViewRole('coach')">코치</div>
+      <div class="chip-select ${isOwner()?'on':''}" onclick="clickAdminToggle()">관리자</div>
+    </div>` : ''}
+  </div>`;
+}
+
+async function setViewRole(role){
+  if (role!=='coach') return;
+  STATE.role = 'coach';
+  await refreshAllData();
+  render();
+}
+// "관리자" 버튼을 누르면 바로 전환되지 않고, 본인 비밀번호를 다시 입력해야만 매출·결제 등
+// 관리자 전용 데이터를 불러온다 (DB 권한 자체는 이미 owner이므로, 이건 화면 잠금 목적)
+function clickAdminToggle(){
+  if (isOwner()) return;
+  STATE._adminGate = { pw:'', error:'' };
+  renderAdminGate();
+}
+function adminGateInput(el){ STATE._adminGate.pw = el.value; }
+async function submitAdminGate(){
+  const g = STATE._adminGate;
+  const { error } = await sb.auth.signInWithPassword({ email: STATE.myEmail, password: g.pw });
+  if (error) {
+    g.error = '비밀번호가 올바르지 않습니다'; g.pw = '';
+    renderAdminGate();
+    return;
+  }
+  STATE.role = 'owner';
+  closeModal();
+  await refreshAllData();
+  render();
+}
+function renderAdminGate(){
+  const g = STATE._adminGate;
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px;">관리자 모드</div>
+    <div style="font-size:12px;color:#94a3b8;font-weight:600;margin-bottom:14px;">본인 비밀번호를 다시 입력하면 매출·결제 등 관리자 전용 화면을 볼 수 있습니다</div>
+    <input type="password" autofocus value="${g.pw}" oninput="adminGateInput(this)" onkeydown="if(event.key==='Enter')submitAdminGate()" placeholder="비밀번호" style="text-align:center;letter-spacing:4px;font-size:16px;font-weight:800;" />
+    ${g.error ? `<div style="font-size:12px;color:#dc2626;font-weight:700;margin-top:8px;text-align:center;">${g.error}</div>` : ''}
+    <div class="btn-primary" style="margin-top:16px;" onclick="submitAdminGate()">확인</div>
+  </div>`;
+  openModal(html);
+}
+
+function setTab(tab){ if (tab==='settings' && !isOwner()) return; if (tab==='history' && !isOwner()) return; STATE.tab = tab; render(); }
+
+function bottomNavHtml(){
+  const items = [
+    {id:'timetable', icon:ICONS.calendar, label:'시간표'},
+    {id:'availability', icon:ICONS.chart, label:'잔여석'},
+    {id:'members', icon:ICONS.users, label:'회원'},
+    isOwner() ? {id:'history', icon:ICONS.history, label:'이력'} : {id:'myinfo', icon:ICONS.history, label:'내수업'},
+    isOwner() ? {id:'settings', icon:ICONS.settings, label:'설정'} : null
+  ].filter(Boolean);
+  return '<div class="m-bottomnav">' + items.map(it=>{
+    return `<div class="m-navitem ${STATE.tab===it.id?'active':''}" onclick="setTab('${it.id}')">${it.icon}${it.label}</div>`;
+  }).join('') + '</div>';
+}
+
+function fabHtml(){
+  if (STATE.tab==='members') return `<div class="fab" onclick="openNewMemberWizard()">${ICONS.plus}</div>`;
+  return '';
+}
+
+function viewHtml(){
+  switch(STATE.tab){
+    case 'timetable': return timetableView();
+    case 'availability': return availabilityView();
+    case 'members': return membersView();
+    case 'history': return historyView();
+    case 'settings': return settingsView();
+    case 'myinfo': return myInfoView();
+    default: return '';
+  }
+}
+
+/* ---------- 1) 월간 시간표 ---------- */
+function timetableHeaderHtml(){
+  const weekStart = fromISO(STATE.weekStart);
+  const days = [...Array(7)].map((_,i)=>addDays(weekStart,i));
+  const selected = STATE.selectedDate || STATE.today;
+  const monthTitle = weekStart.getFullYear()+'년 '+(weekStart.getMonth()+1)+'월';
+  let html = `<div style="padding:10px 18px 12px 18px;border-top:1px solid #f1f5f9;">
+    <div style="display:flex;align-items:center;justify-content:center;gap:12px;">
+      <span onclick="shiftWeek(-1)" style="cursor:pointer;">${ICONS.chevL}</span>
+      <span onclick="openMonthPicker()" style="font-size:14px;font-weight:800;cursor:pointer;text-decoration:underline;text-decoration-color:#cbd5e1;text-underline-offset:4px;">${monthTitle}</span>
+      <span onclick="shiftWeek(1)" style="cursor:pointer;">${ICONS.chevR}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:10px;">`;
+  days.forEach(d=>{
+    const iso = toISO(d);
+    const has = sessionsOnDate(iso).length > 0;
+    const sel = iso===selected;
+    html += `<div class="day-chip" style="${sel?'background:#4f46e5;':''}" onclick="selectDate('${iso}')">
+      <span style="font-size:10px;font-weight:700;color:${sel?'#c7d2fe':'#94a3b8'};">${WD[d.getDay()]}</span>
+      <span style="font-size:13px;font-weight:${sel?'800':'700'};color:${sel?'#fff':'#0f172a'};">${d.getDate()}</span>
+      <div style="width:4px;height:4px;border-radius:50%;background:${has?'#cbd5e1':'transparent'};"></div>
+    </div>`;
+  });
+  html += `</div></div>`;
+  return html;
+}
+function timetableView(){
+  const selected = STATE.selectedDate || STATE.today;
+  const daySessions = sessionsOnDate(selected);
+
+  const groups = {};
+  const seen = new Set();
+  daySessions.forEach(s=>{
+    const key = s.startTime+'|'+(s.courtId||'_none');
+    groups[key] = groups[key] || [];
+    groups[key].push(s);
+  });
+
+  const coachTimeCourts = {};
+  daySessions.filter(s=>s.status!=='cancelled').forEach(s=>{
+    const k = s.coachId+'|'+s.startTime;
+    coachTimeCourts[k] = coachTimeCourts[k] || new Set();
+    if (s.courtId) coachTimeCourts[k].add(s.courtId);
+  });
+
+  let warnCount = 0;
+  const courtTimeWarn = {};
+  const courtTimeWarnDetail = {};
+  Object.keys(groups).forEach(key=>{
+    const list = groups[key];
+    const coaches = new Set(list.map(s=>s.coachId));
+    if (coaches.size > 1) { courtTimeWarn[key]='conflict'; courtTimeWarnDetail[key]='코트 중복배정 · 코치 겹침'; warnCount++; }
+    const doubleBookedCoach = list.find(s=>{ const k=s.coachId+'|'+s.startTime; return coachTimeCourts[k] && coachTimeCourts[k].size>1; });
+    if (doubleBookedCoach && !courtTimeWarn[key]) {
+      courtTimeWarn[key]='conflict';
+      courtTimeWarnDetail[key] = `${staffById(doubleBookedCoach.coachId).name} 코치가 같은 시간 다른 코트에도 배정됨`;
+      warnCount++;
+    }
+    const product = list[0] ? (productForSession(list[0])) : null;
+    if (product && list.length > product.capacity) { courtTimeWarn[key] = courtTimeWarn[key]==='conflict' ? 'conflict' : 'capacity'; warnCount++; }
+  });
+
+  let html = `<div style="padding:14px 18px 16px 18px;">
+    <div style="font-size:14px;font-weight:800;margin-bottom:8px;">${selected.slice(5).replace('-','월 ')}일(${WD[fromISO(selected).getDay()]}) · ${daySessions.filter(s=>s.status!=='cancelled').length}수업</div>`;
+
+  if (warnCount>0) {
+    html += `<div style="display:flex;align-items:center;gap:6px;background:#fef2f2;border:1px solid #fecaca;padding:7px 10px;border-radius:8px;margin-bottom:12px;color:#b91c1c;">
+      <span style="display:flex;">${ICONS.warn}</span><span style="font-size:12px;font-weight:700;">경고 ${warnCount}건 — 코트 중복배정/정원초과 확인</span></div>`;
+  }
+
+  // 운영시간이 새벽~밤까지 넓어서, 그날 실제 수업이 있는 시간대만 표시한다 (없으면 안내 문구)
+  const activeHours = OPERATING_HOURS.filter(t=>STATE.courts.some(c=>(groups[t+'|'+c.id]||[]).length>0));
+  if (activeHours.length===0) {
+    html += `<div style="text-align:center;padding:40px 0;color:#94a3b8;font-size:13px;">이 날짜엔 등록된 수업이 없습니다.</div>`;
+  }
+  activeHours.forEach(t=>{
+    html += `<div style="font-size:12px;font-weight:700;color:#0f172a;margin:14px 0 6px 0;">${t}</div>
+    <div style="display:grid;grid-template-columns:repeat(${STATE.courts.length},1fr);gap:6px;">`;
+    STATE.courts.forEach(court=>{
+      const key = t+'|'+court.id;
+      const list = groups[key] || [];
+      list.forEach(s=>seen.add(s.id));
+      const warn = courtTimeWarn[key];
+      const product = list[0] ? productForSession(list[0]) : null;
+      html += `<div class="m-card" style="padding:8px;${warn?'border-color:#fca5a5;background:#fffafa;':''}">`;
+      if (warn) {
+        const txt = warn==='conflict' ? (courtTimeWarnDetail[key] || '코트 중복배정 · 코치 겹침') : `정원초과 ${list.length}/${product?product.capacity:'-'}`;
+        html += `<div style="display:flex;align-items:center;gap:3px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:3px 5px;margin-bottom:6px;color:#b91c1c;">
+          <span style="display:flex;flex-shrink:0;">${ICONS.warn}</span><span style="font-size:9px;font-weight:700;line-height:1.3;">${txt}</span></div>`;
+      }
+      html += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:4px;">
+        <div style="font-size:11px;font-weight:800;white-space:nowrap;">${court.name}</div>
+        ${list.length>0 ? `<span class="cap-badge ${product && list.length>product.capacity?'cap-warn':''}" style="font-size:9px;padding:2px 6px;">${list.length}${product?'/'+product.capacity:''}</span>` : ''}
+      </div>`;
+      if (list.length===0) {
+        const weekday = fromISO(selected).getDay();
+        const tpl = STATE.classTemplates.find(x=>x.weekday===weekday && x.courtId===court.id && templateHours(x).includes(t));
+        html += `<div style="color:#cbd5e1;font-size:11px;font-weight:600;">비어있음</div>
+        <div style="color:#4f46e5;font-size:10px;font-weight:800;cursor:pointer;margin-top:4px;" onclick="openFillSlotPicker('${selected}','${t}','${court.id}',${tpl?`'${tpl.coachId}'`:'null'})">+ 보강 회원 배정</div>`;
+      } else {
+        list.forEach(s=>{
+          const m = memberById(s.memberId);
+          const coach = staffById(s.coachId);
+          html += `<div style="padding:5px 0;border-top:1px solid #f1f5f9;cursor:pointer;" onclick="openSessionSheet('${s.id}')">
+            <div style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m?m.name:'(삭제된 회원)'}${s.originType==='package_session'?' <span style=\"color:#0d9488;font-weight:600;\">개인</span>':''}</div>
+            <div style="font-size:9px;color:#94a3b8;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${coach?coach.name+' 코치':''}</div>
+            <div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;margin-top:3px;">
+              ${s.capacityOverride?'<span class="status-badge" style="color:#b45309;background:#fef3c7;border-color:#fde68a;font-size:9px;padding:2px 5px;">강제</span>':''}
+              <span class="status-badge st-${s.status}" style="font-size:9px;padding:2px 5px;">${statusIcon(s.status)}${STATUS_LABEL[s.status]}</span>
+            </div>
+          </div>`;
+        });
+      }
+      html += `</div>`;
+    });
+    html += `</div>`;
+  });
+
+  const leftover = daySessions.filter(s=>!seen.has(s.id));
+  if (leftover.length>0) {
+    html += `<div style="font-size:12px;font-weight:700;color:#0f172a;margin:14px 0 6px 0;">기타</div><div class="m-card">`;
+    leftover.forEach(s=>{
+      const m = memberById(s.memberId); const coach = staffById(s.coachId);
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;" onclick="openSessionSheet('${s.id}')">
+        <span style="flex:1;font-size:13px;font-weight:600;">${m?m.name:'-'} <span style="font-weight:500;color:#94a3b8;font-size:11px;">${s.startTime} ${coach?'· '+coach.name+' 코치':''}${courtById(s.courtId)?' · '+courtById(s.courtId).name:''}</span></span>
+        <span class="status-badge st-${s.status}">${statusIcon(s.status)}${STATUS_LABEL[s.status]}</span>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  html += `</div>`;
+  return html;
+}
+function statusIcon(status){
+  if (status==='scheduled') return ICONS.clock;
+  if (status==='attended' || status==='makeup_completed') return ICONS.check;
+  if (status==='absent') return ICONS.x;
+  if (status==='makeup_scheduled') return ICONS.refresh;
+  if (status==='cancelled') return ICONS.ban;
+  return '';
+}
+function productForSession(s){
+  if (s.enrollmentId) { const e = STATE.enrollments.find(e=>e.id===s.enrollmentId); if (e) return productById(e.productId); }
+  const slot = STATE.slots.find(sl=>sl.id===s.sourceSlotId);
+  if (slot) return productById(slot.productId);
+  if (s.packageId) { const prod = STATE.products.find(p=>p.mode==='session_pack'); if (prod) return prod; }
+  return null;
+}
+function shiftWeek(n){ STATE.weekStart = toISO(addDays(fromISO(STATE.weekStart), 7*n)); STATE.selectedDate = toISO(addDays(fromISO(STATE.weekStart), 0)); render(); }
+function selectDate(iso){ STATE.selectedDate = iso; render(); }
+
+function openMonthPicker(){
+  const base = fromISO(STATE.selectedDate || STATE.today);
+  STATE._monthPicker = { year: base.getFullYear(), month: base.getMonth() };
+  renderMonthPicker();
+}
+function shiftMonthPicker(n){
+  const mp = STATE._monthPicker;
+  let m = mp.month+n, y = mp.year;
+  while (m>11){ m-=12; y++; }
+  while (m<0){ m+=12; y--; }
+  mp.month = m; mp.year = y;
+  renderMonthPicker();
+}
+function pickMonthDate(iso){
+  STATE.selectedDate = iso;
+  STATE.weekStart = toISO(addDays(fromISO(iso), -fromISO(iso).getDay()));
+  closeModal(); render();
+}
+function renderMonthPicker(){
+  const mp = STATE._monthPicker;
+  const first = new Date(mp.year, mp.month, 1);
+  const startOffset = first.getDay();
+  const daysInMonth = new Date(mp.year, mp.month+1, 0).getDate();
+  const selected = STATE.selectedDate || STATE.today;
+  let cells = '';
+  for (let i=0;i<startOffset;i++) cells += `<div></div>`;
+  for (let d=1; d<=daysInMonth; d++) {
+    const iso = toISO(new Date(mp.year, mp.month, d));
+    const has = sessionsOnDate(iso).length>0;
+    const sel = iso===selected;
+    const isToday = iso===STATE.today;
+    cells += `<div onclick="pickMonthDate('${iso}')" style="height:42px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:10px;cursor:pointer;${sel?'background:#4f46e5;':(isToday?'background:#eef0ff;':'')}">
+      <span style="font-size:13px;font-weight:${sel?'800':'600'};color:${sel?'#fff':'#0f172a'};">${d}</span>
+      <div style="width:4px;height:4px;border-radius:50%;margin-top:2px;background:${has?(sel?'#fff':'#94a3b8'):'transparent'};"></div>
+    </div>`;
+  }
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:16px;">
+      <span onclick="shiftMonthPicker(-1)" style="cursor:pointer;">${ICONS.chevL}</span>
+      <span style="font-size:16px;font-weight:800;">${mp.year}년 ${mp.month+1}월</span>
+      <span onclick="shiftMonthPicker(1)" style="cursor:pointer;">${ICONS.chevR}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px;">
+      ${WD.map((w,i)=>`<div style="text-align:center;font-size:11px;font-weight:700;color:${i===0?'#dc2626':(i===6?'#2563eb':'#94a3b8')};">${w}</div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">${cells}</div>
+    <div class="btn-secondary" style="margin-top:16px;" onclick="pickMonthDate('${STATE.today}')">오늘로 이동</div>
+  </div>`;
+  openModal(html);
+}
+
+/* ---------- 2) 잔여석 현황판 ---------- */
+function availabilityView(){
+  const weekday = STATE.availWeekday;
+  const rows = availabilityForWeekday(weekday);
+  const totalRemain14 = rows.filter(r=>{ const p=productById(r.productId); return p && p.mode==='monthly' && p.capacity>=3; }).reduce((a,r)=>a+Math.max(r.remaining,0),0);
+  const p12rows = rows.filter(r=>{ const p=productById(r.productId); return p && p.mode==='monthly' && p.capacity<3; });
+  const p12tight = p12rows.some(r=>r.remaining<=1);
+  const coaches = STATE.staff.filter(s=>s.role==='coach');
+
+  let html = `<div style="padding:14px 18px;">
+    <div style="font-size:16px;font-weight:800;">잔여석 현황판</div>
+    <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-top:2px;">신규 문의 응대용 · 요일 선택 후 확인</div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <div style="flex:1;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:9px 10px;">
+        <div style="font-size:10px;font-weight:700;color:#15803d;">1:4 레슨</div>
+        <div style="font-size:12px;font-weight:800;color:#15803d;margin-top:2px;">${totalRemain14}자리 여유</div>
+      </div>
+      <div style="flex:1;background:${p12tight?'#fffbeb':'#f0fdf4'};border:1px solid ${p12tight?'#fde68a':'#bbf7d0'};border-radius:12px;padding:9px 10px;">
+        <div style="font-size:10px;font-weight:700;color:${p12tight?'#b45309':'#15803d'};">1:2 레슨</div>
+        <div style="font-size:12px;font-weight:800;color:${p12tight?'#b45309':'#15803d'};margin-top:2px;">${p12tight?'마감임박':'여유'}</div>
+      </div>
+      <div style="flex:1;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:9px 10px;">
+        <div style="font-size:10px;font-weight:700;color:#1d4ed8;">개인레슨</div>
+        <div style="font-size:12px;font-weight:800;color:#1d4ed8;margin-top:2px;">코치 ${coaches.length}명</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:16px;">`;
+  WD.forEach((w,i)=>{
+    const on = i===weekday;
+    html += `<div class="day-chip" style="flex:1;background:${on?'#0f172a':'#f1f5f9'};" onclick="setAvailWeekday(${i})"><span style="font-size:11px;font-weight:700;color:${on?'#fff':'#94a3b8'};">${w}</span></div>`;
+  });
+  html += `</div></div>`;
+
+  html += `<div style="padding:0 18px;">
+    <div style="font-size:12px;font-weight:700;color:#94a3b8;margin-bottom:8px;">${WD[weekday]}요일 · 코치별 정규수업 잔여석</div>`;
+  if (rows.length===0) html += `<div style="font-size:13px;color:#94a3b8;padding:10px 0;">이 요일엔 등록된 정규수업이 없습니다.</div>`;
+  coaches.forEach(c=>{
+    const coachRows = rows.filter(r=>r.coachId===c.id);
+    if (coachRows.length===0) return;
+    html += `<div class="m-card" style="margin-bottom:10px;">
+      <div style="font-size:13px;font-weight:800;margin-bottom:8px;">${c.name} 코치</div>`;
+    const timeCourtCount = {};
+    coachRows.forEach(r=>{ timeCourtCount[r.time] = (timeCourtCount[r.time]||0)+1; });
+    const byProduct = {};
+    coachRows.forEach(r=>{ byProduct[r.productId] = byProduct[r.productId] || []; byProduct[r.productId].push(r); });
+    Object.keys(byProduct).sort().forEach(pid=>{
+      const product = productById(pid);
+      html += `<div style="font-size:11px;font-weight:700;color:#94a3b8;margin:8px 0 4px 0;">${product.name.split(' ')[0]} 레슨</div>`;
+      byProduct[pid].sort((a,b)=>a.time.localeCompare(b.time)).forEach(r=>{
+        const lab = availLabel(r.remaining);
+        const pct = Math.max(0, Math.min(100, Math.round((r.used/product.capacity)*100)));
+        const barColor = r.remaining<=0?'#dc2626':(r.remaining===1?'#d97706':'#16a34a');
+        const doubleBooked = timeCourtCount[r.time] > 1;
+        html += `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid #f1f5f9;">
+          <div style="font-size:12px;font-weight:700;width:66px;">${r.time}<br/><span style="font-weight:500;color:${doubleBooked?'#b91c1c':'#94a3b8'};font-size:10px;">${courtById(r.courtId)?courtById(r.courtId).name:''}</span></div>
+          <div class="gauge"><div style="width:${pct}%;background:${barColor};"></div></div>
+          <span style="font-size:11px;font-weight:700;color:#64748b;width:32px;">${r.used}/${product.capacity}</span>
+          <span class="avail-pill" style="background:${lab.bg};color:${lab.color};">${lab.text}</span>
+        </div>`;
+        if (doubleBooked) {
+          html += `<div style="display:flex;align-items:center;gap:6px;color:#b91c1c;font-size:10px;font-weight:700;padding-bottom:4px;">${ICONS.warn} 이 코치가 ${r.time}에 다른 코트에도 배정되어 있습니다</div>`;
+        }
+      });
+    });
+    html += `</div>`;
+  });
+  html += `</div>`;
+
+  html += `<div style="padding:16px 18px;">
+    <div style="font-size:12px;font-weight:700;color:#94a3b8;margin-bottom:8px;">개인레슨(1:1) — 코치를 눌러 가능한 시간 확인</div>`;
+  coaches.forEach(c=>{
+    html += `<div class="m-card" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="openCoachAvailability('${c.id}')">
+      <div>
+        <div style="font-size:13px;font-weight:700;">${c.name} 코치</div>
+        <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-top:2px;">정규수업이 없는 요일·시간에 배정 가능</div>
+      </div>
+      <span class="avail-pill" style="background:#eef0ff;color:#4338ca;">가능시간 보기</span>
+    </div>`;
+  });
+  html += `</div>`;
+  return html;
+}
+function setAvailWeekday(i){ STATE.availWeekday = i; render(); }
+
+function openCoachAvailability(coachId){
+  const coach = staffById(coachId);
+  const slots = STATE.slots.filter(s=>s.coachId===coachId && s.active);
+  const busy = {};
+  slots.forEach(s=>{ busy[s.weekday] = busy[s.weekday]||new Set(); busy[s.weekday].add(s.time); });
+  let grid = `<div style="display:grid;grid-template-columns:44px repeat(7,1fr);gap:4px;">
+    <div></div>${WD.map(w=>`<div style="text-align:center;font-size:10px;font-weight:700;color:#94a3b8;">${w}</div>`).join('')}`;
+  OPERATING_HOURS.forEach(t=>{
+    grid += `<div style="font-size:10px;font-weight:700;display:flex;align-items:center;">${t}</div>`;
+    for (let wd=0; wd<7; wd++){
+      const isBusy = busy[wd] && busy[wd].has(t);
+      grid += `<div style="height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;background:${isBusy?'#f1f5f9':'#f0fdf4'};color:${isBusy?'#94a3b8':'#15803d'};">${isBusy?'수업중':'가능'}</div>`;
+    }
+  });
+  grid += `</div>`;
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px;">${coach.name} 코치 — 개인레슨 가능 시간</div>
+    <div style="font-size:12px;color:#94a3b8;font-weight:600;margin-bottom:14px;">정규수업이 없는 요일·시간에 1:1을 배정할 수 있어요 (매주 반복 기준)</div>
+    ${grid}
+  </div>`;
+  openModal(html);
+}
+
+/* ---------- 3) 회원목록 ---------- */
+function membersView(){
+  const q = STATE.memberQuery || '';
+  const filter = STATE.memberFilter || 'all';
+  let list = STATE.members.filter(m=> m.name.includes(q));
+  const thisMonth = ym(fromISO(STATE.today));
+  let html = `<div style="padding:14px 18px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:10px;">회원목록 (${STATE.members.length}명)</div>
+    <div style="display:flex;align-items:center;gap:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:9px 12px;">
+      <span style="display:flex;color:#94a3b8;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg></span>
+      <input type="text" oninput="setMemberQuery(this.value)" value="${q}" placeholder="회원 이름 검색" style="border:none;padding:0;background:transparent;flex:1;font-size:13px;" />
+    </div>
+    <div style="display:flex;gap:6px;margin-top:10px;overflow-x:auto;">
+      <div class="chip-select ${filter==='all'?'on':''}" onclick="setMemberFilter('all')">전체</div>
+      <div class="chip-select ${filter==='monthly'?'on':''}" onclick="setMemberFilter('monthly')">정규수업</div>
+      <div class="chip-select ${filter==='package'?'on':''}" onclick="setMemberFilter('package')">개인레슨</div>
+    </div>
+  </div><div style="padding:0 18px;">`;
+
+  list.forEach(m=>{
+    const slots = slotsOfMember(m.id);
+    const slot = slots[0];
+    const hasPkg = memberHasPackage(m.id);
+    if (filter==='monthly' && slots.length===0) return;
+    if (filter==='package' && !hasPkg) return;
+    const initial = m.name[0];
+    let sub, pill;
+    if (slot) {
+      const coach = staffById(slot.coachId), product = productById(slot.productId);
+      sub = `${coach?coach.name:'-'} 코치 · ${WD[slot.weekday]} ${slot.time} · ${product?product.name.split(' ')[0]:''}`;
+      if (slots.length>1) sub += ` 외 ${slots.length-1}건`;
+      const paidCount = slots.filter(sl=>getSlotPaidStatus(sl.id, thisMonth)).length;
+      if (paidCount===slots.length) pill = {t:'등록완료',bg:'#f0fdf4',c:'#15803d'};
+      else if (paidCount===0) pill = {t:'미등록',bg:'#fef2f2',c:'#b91c1c'};
+      else pill = {t:`일부미등록(${paidCount}/${slots.length})`,bg:'#fffbeb',c:'#b45309'};
+    } else if (hasPkg) {
+      const disp = getPackageDisplay(m.id);
+      const coach = staffById(disp.coachId);
+      sub = `${coach?coach.name:'-'} 코치 · 개인레슨 · 잔여 ${disp.remaining}회`;
+      pill = {t:'진행중',bg:'#f0fdfa',c:'#0f766e'};
+    } else { sub=''; pill={t:'-',bg:'#f1f5f9',c:'#64748b'}; }
+    html += `<div class="m-card" style="display:flex;align-items:center;gap:12px;cursor:pointer;" onclick="openMemberSheet('${m.id}')">
+      <div style="width:38px;height:38px;border-radius:50%;background:#4f46e5;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;">${initial}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;font-weight:700;">${m.name}</div>
+        <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${sub}</div>
+      </div>
+      <span class="avail-pill" style="background:${pill.bg};color:${pill.c};">${pill.t}</span>
+    </div>`;
+  });
+  html += `</div>`;
+  return html;
+}
+function setMemberQuery(v){ STATE.memberQuery = v; renderKeepFocus(); }
+function setMemberFilter(f){ STATE.memberFilter = f; render(); }
+function renderKeepFocus(){ render(); const el=document.querySelector('#mainView input[type=text]'); if (el){ el.focus(); el.selectionStart = el.selectionEnd = el.value.length; } }
+
+/* ---------- 4) 결제관리 (관리자 전용) ---------- */
+function paymentsView(){
+  if (!isOwner()) return `<div style="padding:40px 18px;text-align:center;color:#94a3b8;font-size:13px;">관리자만 접근할 수 있는 화면입니다.</div>`;
+  const yearMonth = STATE.paymentMonth;
+  const rows = STATE.enrollments.filter(e=>e.yearMonth===yearMonth);
+  const paidCount = rows.filter(r=>r.paymentStatus==='paid').length;
+  const pct = rows.length ? Math.round(paidCount/rows.length*100) : 0;
+  let html = `<div style="padding:14px 18px;">
+    <div style="font-size:16px;font-weight:800;">월별 결제관리</div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:10px;">
+      <span onclick="shiftPaymentMonth(-1)" style="cursor:pointer;">${ICONS.chevL}</span>
+      <span style="font-size:13px;font-weight:800;">${monthLabel(yearMonth)}</span>
+      <span onclick="shiftPaymentMonth(1)" style="cursor:pointer;">${ICONS.chevR}</span>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;">
+      <span style="font-size:12px;color:#94a3b8;font-weight:600;">등록 진행률</span>
+      <span style="font-size:12px;font-weight:700;color:#4f46e5;">${paidCount}/${rows.length} · ${pct}%</span>
+    </div>
+    <div style="height:6px;background:#f1f5f9;border-radius:999px;margin-top:8px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:#4f46e5;"></div></div>
+  </div><div style="padding:0 18px;">`;
+
+  rows.sort((a,b)=> (a.paymentStatus===b.paymentStatus)?0:(a.paymentStatus==='unpaid'?-1:1));
+  rows.forEach(e=>{
+    const m = memberById(e.memberId); if (!m) return;
+    const slot = slotById(e.slotId); const product = productById(e.productId);
+    const initial = m.name[0];
+    html += `<div class="m-card" style="display:flex;align-items:center;gap:12px;">
+      <div style="width:38px;height:38px;border-radius:50%;background:#4f46e5;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;">${initial}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;font-weight:700;">${m.name}</div>
+        <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-top:2px;">${slot?(staffById(slot.coachId)?staffById(slot.coachId).name:'-')+' · '+WD[slot.weekday]+' '+slot.time:''} · ${e.paymentAmount!=null?e.paymentAmount.toLocaleString():(product?product.price.toLocaleString():0)}원${e.discount?` <span style="color:#dc2626;">-${e.discount.toLocaleString()}원</span>`:''}</div>
+        ${e.paymentStatus!=='paid' && (e.expectedMethod||e.expectedCardCompany) ? `<div style="font-size:11px;color:#c2410c;font-weight:600;margin-top:2px;">예상: ${e.expectedMethod||''}${e.expectedCardCompany?' · '+e.expectedCardCompany:''}</div>` : ''}
+      </div>
+      ${e.paymentStatus==='paid'
+        ? `<div style="padding:8px 12px;border-radius:9px;background:#0f172a;color:#fff;font-size:12px;font-weight:700;">완료</div>`
+        : `<div style="padding:8px 12px;border-radius:9px;background:#f1f5f9;border:1px solid #e2e8f0;color:#334155;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;" onclick="openConfirmPaymentPicker('${e.id}', ${e.paymentAmount!=null?e.paymentAmount:(product?product.price:0)}, ${e.expectedMethod?`'${e.expectedMethod}'`:'null'}, ${e.expectedCardCompany?`'${e.expectedCardCompany}'`:'null'})">입금 확인</div>`
+      }
+    </div>`;
+  });
+  html += `</div>`;
+  return html;
+}
+function shiftPaymentMonth(n){ STATE.paymentMonth = addMonths(STATE.paymentMonth, n); render(); }
+
+/* ---------- 5) 변경이력 (관리자 전용) ---------- */
+function historyView(){
+  if (!isOwner()) return `<div style="padding:40px 18px;text-align:center;color:#94a3b8;font-size:13px;">관리자만 접근할 수 있는 화면입니다.</div>`;
+  let html = `<div style="padding:14px 18px;"><div style="font-size:16px;font-weight:800;margin-bottom:10px;">변경이력</div></div><div style="padding:0 18px;">`;
+  (STATE.logs||[]).slice(0,60).forEach(l=>{
+    html += `<div class="m-card">
+      <div style="font-size:11px;color:#94a3b8;font-weight:600;">${l.createdAt} · ${l.actorName} ${l.actorRole==='owner'?'':'코치'}</div>
+      <div style="font-size:13px;color:#0f172a;font-weight:600;margin-top:6px;line-height:1.6;">${l.memberName ? l.memberName+' 회원 · ' : ''}${l.text}</div>
+    </div>`;
+  });
+  if (!STATE.logs || STATE.logs.length===0) html += `<div style="text-align:center;padding:40px 0;color:#94a3b8;font-size:13px;">아직 기록된 변경이 없습니다.</div>`;
+  html += `</div>`;
+  return html;
+}
+
+/* ---------- 내수업 통계 클릭 시 목록 보기 ---------- */
+function openMyStatList(kind){
+  const myId = STATE.myStaffId;
+  const thisMonth = ym(fromISO(STATE.today));
+  let title, rows;
+  if (kind==='members') {
+    const myMemberIds = new Set(STATE.slots.filter(s=>s.coachId===myId && s.active).map(s=>s.memberId));
+    Object.keys(STATE.packageStatusByMember||{}).forEach(mid=>{ if (STATE.packageStatusByMember[mid].defaultCoachId===myId) myMemberIds.add(mid); });
+    title = '담당 회원';
+    rows = [...myMemberIds].map(mid=>memberById(mid)).filter(Boolean).sort((a,b)=>a.name.localeCompare(b.name));
+    const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+    <div style="padding:6px 20px 20px 20px;">
+      <div style="font-size:16px;font-weight:800;margin-bottom:4px;">${title} ${rows.length}명</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px;">
+        ${rows.length===0 ? `<div style="font-size:13px;color:#94a3b8;">담당 회원이 없습니다.</div>` : rows.map(m=>`<div class="m-card" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="closeModal();openMemberSheet('${m.id}')">
+          <span style="font-size:13px;font-weight:700;">${m.name}</span>
+          <span style="font-size:11px;color:#4f46e5;font-weight:700;">보기</span>
+        </div>`).join('')}
+      </div>
+    </div>`;
+    openModal(html);
+    return;
+  }
+  // attended / absent: 이번 달 수업 세션 목록
+  const mySessions = STATE.sessions.filter(s=>s.coachId===myId && s.date.slice(0,7)===thisMonth && s.status===kind).sort((a,b)=>a.date.localeCompare(b.date));
+  title = kind==='attended' ? '출석 처리한 수업' : '결석 처리한 수업';
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px;">${monthLabel(thisMonth)} ${title} ${mySessions.length}건</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px;">
+      ${mySessions.length===0 ? `<div style="font-size:13px;color:#94a3b8;">해당 내역이 없습니다.</div>` : mySessions.map(s=>{
+        const m = memberById(s.memberId);
+        return `<div class="m-card" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="closeModal();openMemberSheet('${s.memberId}')">
+          <span style="font-size:13px;font-weight:700;">${m?m.name:'-'}</span>
+          <span style="font-size:11px;color:#94a3b8;font-weight:700;">${s.date} ${s.startTime}</span>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+  openModal(html);
+}
+
+/* ---------- 본인 비밀번호 변경 ---------- */
+function openChangePasswordModal(){
+  STATE._changePw = { next:'', confirm:'', error:'' };
+  renderChangePasswordModal();
+}
+function changePwField(key, el){ STATE._changePw[key] = el.value; }
+function renderChangePasswordModal(){
+  const c = STATE._changePw;
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px;">비밀번호 변경</div>
+    <div style="font-size:12px;color:#94a3b8;font-weight:600;margin-bottom:14px;">${STATE.myName} 계정의 비밀번호를 바꿉니다</div>
+    <div class="field-label">새 비밀번호</div>
+    <input type="password" value="${c.next}" oninput="changePwField('next', this)" placeholder="4자 이상" />
+    <div class="field-label" style="margin-top:12px;">새 비밀번호 확인</div>
+    <input type="password" value="${c.confirm}" oninput="changePwField('confirm', this)" onkeydown="if(event.key==='Enter')submitChangePassword()" placeholder="다시 입력" />
+    ${c.error ? `<div style="font-size:12px;color:#dc2626;font-weight:700;margin-top:8px;">${c.error}</div>` : ''}
+    <div class="btn-primary" style="margin-top:16px;" onclick="submitChangePassword()">변경하기</div>
+  </div>`;
+  openModal(html);
+}
+async function submitChangePassword(){
+  const c = STATE._changePw;
+  if (c.next.length < 6) { c.error='비밀번호는 6자 이상으로 해주세요'; renderChangePasswordModal(); return; }
+  if (c.next !== c.confirm) { c.error='두 비밀번호가 서로 다릅니다'; renderChangePasswordModal(); return; }
+  const { error } = await sb.auth.updateUser({ password: c.next });
+  if (error) { c.error = error.message; renderChangePasswordModal(); return; }
+  closeModal();
+  toast('비밀번호가 변경되었습니다');
+}
+
+/* ---------- 5b) 내 수업 현황 (코치 전용) ---------- */
+function myInfoView(){
+  const myId = STATE.myStaffId;
+  const thisMonth = ym(fromISO(STATE.today));
+  const mySessions = STATE.sessions.filter(s=>s.coachId===myId);
+  const monthSessions = mySessions.filter(s=>s.date.slice(0,7)===thisMonth && s.status!=='cancelled');
+  const todaySessions = mySessions.filter(s=>s.date===STATE.today && s.status!=='cancelled').sort((a,b)=>a.startTime.localeCompare(b.startTime));
+  const attended = monthSessions.filter(s=>s.status==='attended').length;
+  const absent = monthSessions.filter(s=>s.status==='absent').length;
+  const scheduled = monthSessions.filter(s=>s.status==='scheduled').length;
+  const myMemberIds = new Set(STATE.slots.filter(s=>s.coachId===myId && s.active).map(s=>s.memberId));
+  Object.keys(STATE.packageStatusByMember||{}).forEach(mid=>{ if (STATE.packageStatusByMember[mid].defaultCoachId===myId) myMemberIds.add(mid); });
+
+  let html = `<div style="padding:14px 18px;">
+    <div style="font-size:16px;font-weight:800;">내 수업 현황</div>
+    <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-top:2px;">${STATE.myName} 코치 · ${monthLabel(thisMonth)}</div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:14px;">
+      <div class="stat-tile"><div style="font-size:20px;font-weight:800;">${monthSessions.length}</div><div style="font-size:11px;color:#94a3b8;font-weight:700;margin-top:2px;">이번 달 담당 수업</div></div>
+      <div class="stat-tile" style="cursor:pointer;" onclick="openMyStatList('members')"><div style="font-size:20px;font-weight:800;">${myMemberIds.size}</div><div style="font-size:11px;color:#94a3b8;font-weight:700;margin-top:2px;">담당 회원 수</div></div>
+      <div class="stat-tile" style="cursor:pointer;" onclick="openMyStatList('attended')"><div style="font-size:20px;font-weight:800;color:#15803d;">${attended}</div><div style="font-size:11px;color:#94a3b8;font-weight:700;margin-top:2px;">출석 처리</div></div>
+      <div class="stat-tile" style="cursor:pointer;" onclick="openMyStatList('absent')"><div style="font-size:20px;font-weight:800;color:#b91c1c;">${absent}</div><div style="font-size:11px;color:#94a3b8;font-weight:700;margin-top:2px;">결석 처리</div></div>
+    </div>
+    <div style="font-size:11px;color:#4f46e5;font-weight:700;margin-top:12px;cursor:pointer;text-align:right;" onclick="openChangePasswordModal()">비밀번호 변경</div>
+  </div>
+  <div style="padding:0 18px;">
+    <div style="font-size:12px;font-weight:700;color:#94a3b8;margin-bottom:8px;">오늘 내 수업 (${todaySessions.length}건)</div>`;
+  if (todaySessions.length===0) html += `<div style="font-size:13px;color:#94a3b8;padding:10px 0;">오늘 예정된 수업이 없습니다.</div>`;
+  todaySessions.forEach(s=>{
+    const m = memberById(s.memberId);
+    html += `<div class="m-card" style="display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="setTab('timetable');render();">
+      <div style="font-size:13px;font-weight:800;width:46px;">${s.startTime}</div>
+      <div style="flex:1;font-size:13px;font-weight:700;">${m?m.name:'-'}${courtById(s.courtId)?' · '+courtById(s.courtId).name:''}</div>
+      <span class="status-badge st-${s.status}">${statusIcon(s.status)}${STATUS_LABEL[s.status]}</span>
+    </div>`;
+  });
+  html += `</div>`;
+  return html;
+}
+
+/* ---------- 6) 설정 (관리자 전용) ---------- */
+function settingsView(){
+  if (!isOwner()) return `<div style="padding:40px 18px;text-align:center;color:#94a3b8;font-size:13px;">관리자만 접근할 수 있는 화면입니다.</div>`;
+  const tab = STATE.settingsTab || 'payments';
+  let html = `<div style="padding:14px 18px 10px 18px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div style="font-size:16px;font-weight:800;">설정</div>
+      <span style="font-size:11px;color:#4f46e5;font-weight:700;cursor:pointer;" onclick="openChangePasswordModal()">비밀번호 변경</span>
+    </div>
+    <div style="display:flex;gap:6px;overflow-x:auto;">
+      <div class="chip-select ${tab==='payments'?'on':''}" onclick="setSettingsTab('payments')">결제관리</div>
+      <div class="chip-select ${tab==='coaches'?'on':''}" onclick="setSettingsTab('coaches')">코치 관리</div>
+      <div class="chip-select ${tab==='courts'?'on':''}" onclick="setSettingsTab('courts')">코트 관리</div>
+      <div class="chip-select ${tab==='templates'?'on':''}" onclick="setSettingsTab('templates')">코트 배정</div>
+      <div class="chip-select ${tab==='products'?'on':''}" onclick="setSettingsTab('products')">상품 관리</div>
+      <div class="chip-select ${tab==='reports'?'on':''}" onclick="setSettingsTab('reports')">매출 리포트</div>
+      <div class="chip-select ${tab==='bulk'?'on':''}" onclick="setSettingsTab('bulk')">일괄 등록</div>
+    </div>
+  </div>`;
+  if (tab==='payments') html += paymentsView();
+  else if (tab==='coaches') html += coachManagerView();
+  else if (tab==='courts') html += courtManagerView();
+  else if (tab==='templates') html += classTemplateManagerView();
+  else if (tab==='products') html += productManagerView();
+  else if (tab==='reports') html += reportsView();
+  else if (tab==='bulk') html += bulkImportView();
+  return html;
+}
+function setSettingsTab(t){ STATE.settingsTab = t; render(); }
+
+function coachManagerView(){
+  let html = `<div style="padding:4px 18px 18px 18px;">
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:#1d4ed8;font-weight:600;line-height:1.6;">
+      여기서 이름과 비밀번호를 정해서 코치 계정을 만들어 주세요. 코치는 로그인 화면에서 그 이름 + 비밀번호로 바로 들어올 수 있습니다.
+    </div>`;
+  STATE.staff.filter(s=>!s.hideFromLogin && s.status!=='inactive').forEach(c=>{
+    const slotCount = STATE.slots.filter(s=>s.coachId===c.id && s.active).length;
+    html += `<div class="m-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-size:14px;font-weight:700;">${c.name} 코치${c.role==='owner'?' (관리자 겸임)':''}</div>
+        <span style="font-size:11px;color:#b91c1c;font-weight:700;cursor:pointer;" onclick="deleteCoach('${c.id}','${c.name}')">삭제</span>
+      </div>
+      <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-top:2px;">정규수업 ${slotCount}건 담당</div>
+    </div>`;
+  });
+  html += `<div class="btn-secondary" style="margin-top:4px;" onclick="openAddCoachForm()">+ 코치 계정 추가</div></div>`;
+  return html;
+}
+function deleteCoach(coachId, name){
+  if (coachId === STATE.myStaffId) { toast('본인 계정은 여기서 삭제할 수 없습니다'); return; }
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:8px;">${name} 코치 계정을 삭제할까요?</div>
+    <div style="font-size:12px;color:#94a3b8;font-weight:600;line-height:1.6;margin-bottom:18px;">로그인 목록에서 사라지며, 나중에 다시 필요하면 관리자에게 문의해야 복구할 수 있습니다.</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="btn-primary" style="background:#b91c1c;" onclick="confirmDeleteCoach('${coachId}','${name}')">삭제</div>
+      <div class="btn-secondary" onclick="closeModal()">취소</div>
+    </div>
+  </div>`;
+  openModal(html);
+}
+async function confirmDeleteCoach(coachId, name){
+  const { error } = await sb.from('staff').update({ status:'inactive' }).eq('id', coachId);
+  if (error) { toast('삭제 실패: '+error.message); return; }
+  await refreshAllData();
+  closeModal(); render();
+  toast(`${name} 코치 계정이 삭제되었습니다`);
+}
+function openAddCoachForm(){
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:14px;">코치 계정 추가</div>
+    <div class="field-label">이름</div>
+    <input type="text" id="new_coach_name" placeholder="예: 홍길동" />
+    <div class="field-label" style="margin-top:12px;">생년월일 (초기 비밀번호)</div>
+    <input type="text" id="new_coach_password" inputmode="numeric" placeholder="예: 19900101" />
+    <div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.6;">이 생년월일이 처음 로그인할 때 쓰는 비밀번호가 됩니다. 코치는 로그인 후 "내수업 &gt; 비밀번호 변경"에서 본인이 직접 바꿀 수 있습니다.</div>
+    <div class="btn-primary" style="margin-top:16px;" onclick="submitAddCoach()">추가</div>
+  </div>`;
+  openModal(html);
+}
+function courtManagerView(){
+  let html = `<div style="padding:4px 18px 18px 18px;">`;
+  STATE.courts.forEach(c=>{
+    html += `<div class="m-card"><div style="font-size:14px;font-weight:700;">${c.name}</div></div>`;
+  });
+  html += `<div class="btn-secondary" style="margin-top:4px;" onclick="openAddCourtForm()">+ 코트 추가</div></div>`;
+  return html;
+}
+function openAddCourtForm(){
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:14px;">코트 추가</div>
+    <div class="field-label">코트 이름</div>
+    <input type="text" id="new_court_name" placeholder="예: 코트4" />
+    <div class="btn-primary" style="margin-top:16px;" onclick="submitAddCourt()">추가</div>
+  </div>`;
+  openModal(html);
+}
+function classTemplateManagerView(){
+  let html = `<div style="padding:4px 18px 18px 18px;">
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#1d4ed8;font-weight:600;line-height:1.6;">
+      코치가 어느 요일·시간에 어느 코트에서 어떤 상품(1:4/1:2) 수업을 하는지 여기서 먼저 배정해두면, 회원이 아직 한 명도 없어도 잔여석 현황판에 빈 자리로 바로 나타납니다.
+    </div>`;
+  const coachList = STATE.staff.filter(s=>s.role==='coach' || STATE.classTemplates.some(t=>t.coachId===s.id));
+  coachList.forEach(c=>{
+    const templates = STATE.classTemplates.filter(t=>t.coachId===c.id).sort((a,b)=>a.weekday-b.weekday || a.startTime.localeCompare(b.startTime));
+    html += `<div class="m-card" style="margin-bottom:10px;">
+      <div style="font-size:13px;font-weight:800;margin-bottom:8px;">${c.name} 코치</div>
+      ${templates.length===0 ? `<div style="font-size:12px;color:#94a3b8;">배정된 시간이 없습니다.</div>` : templates.map(t=>{
+        const product = productById(t.productId);
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid #f1f5f9;">
+          <span style="font-size:12px;font-weight:700;">${WD[t.weekday]} ${t.startTime}~${t.endTime} · ${courtById(t.courtId)?courtById(t.courtId).name:'-'} · ${product?product.name.split(' ')[0]:'-'}</span>
+          <span style="display:flex;align-items:center;gap:12px;">
+            <span style="font-size:11px;color:#4f46e5;font-weight:700;cursor:pointer;" onclick="openEditTemplateForm('${t.id}')">수정</span>
+            <span style="font-size:11px;color:#b91c1c;font-weight:700;cursor:pointer;" onclick="deleteClassTemplate('${t.id}')">삭제</span>
+          </span>
+        </div>`;
+      }).join('')}
+    </div>`;
+  });
+  html += `<div class="btn-secondary" style="margin-top:4px;" onclick="openAddTemplateForm()">+ 코트 배정 추가</div></div>`;
+  return html;
+}
+function openAddTemplateForm(){
+  const coaches = STATE.staff.filter(s=>s.role==='coach');
+  STATE._newTemplate = { editId:null, coachId:(coaches[0]||{}).id, weekday:1, startTime:'18:00', endTime:'19:00', courtId:STATE.courts[0]?.id, productId:(STATE.products.find(p=>p.mode==='monthly')||{}).id };
+  renderAddTemplateForm();
+}
+function openEditTemplateForm(id){
+  const t = STATE.classTemplates.find(x=>x.id===id);
+  if (!t) return;
+  STATE._newTemplate = { editId:t.id, coachId:t.coachId, weekday:t.weekday, startTime:t.startTime, endTime:t.endTime, courtId:t.courtId, productId:t.productId };
+  renderAddTemplateForm();
+}
+function newTemplateField(key,val){ STATE._newTemplate[key]=val; renderAddTemplateForm(); }
+function renderAddTemplateForm(){
+  const t = STATE._newTemplate;
+  const isEdit = !!t.editId;
+  const coaches = STATE.staff.filter(s=>s.role==='coach');
+  const products = STATE.products.filter(p=>p.mode==='monthly');
+  const endOptions = [...OPERATING_HOURS.slice(1), hourPlusOne(OPERATING_HOURS[OPERATING_HOURS.length-1])];
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:14px;">${isEdit?'코트 배정 수정':'코트 배정 추가'}</div>
+    <div class="field-label">코치</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${coaches.map(c=>`<div class="chip-select ${t.coachId===c.id?'on':''}" onclick="newTemplateField('coachId','${c.id}')">${c.name}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">요일</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${WD.map((d,i)=>`<div class="chip-select ${t.weekday===i?'on':''}" onclick="newTemplateField('weekday',${i})">${d}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">시작 시간</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;max-height:100px;overflow-y:auto;">${OPERATING_HOURS.map(h=>`<div class="chip-select ${t.startTime===h?'on':''}" onclick="newTemplateField('startTime','${h}')">${h}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">종료 시간</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;max-height:100px;overflow-y:auto;">${endOptions.map(h=>`<div class="chip-select ${t.endTime===h?'on':''}" onclick="newTemplateField('endTime','${h}')">${h}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">코트</div>
+    <select onchange="newTemplateField('courtId', this.value)">${STATE.courts.map(c=>`<option value="${c.id}" ${c.id===t.courtId?'selected':''}>${c.name}</option>`).join('')}</select>
+    <div class="field-label" style="margin-top:12px;">수강상품</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${products.map(p=>`<div class="chip-select ${t.productId===p.id?'on':''}" onclick="newTemplateField('productId','${p.id}')">${p.name}</div>`).join('')}</div>
+    <div class="btn-primary" style="margin-top:16px;" onclick="submitAddTemplate()">${isEdit?'저장하기':'배정하기'}</div>
+  </div>`;
+  openModal(html);
+}
+async function submitAddTemplate(){
+  const t = STATE._newTemplate;
+  const isEdit = !!t.editId;
+  if (!t.coachId) { toast('코치를 선택하세요'); return; }
+  if (t.startTime >= t.endTime) { toast('종료 시간이 시작 시간보다 늦어야 합니다'); return; }
+  const hours = templateHours(t);
+  const conflictTpl = STATE.classTemplates.find(o=>o.id!==t.editId && o.coachId!==t.coachId && o.weekday===t.weekday && o.courtId===t.courtId && templateHours(o).some(h=>hours.includes(h)));
+  if (conflictTpl) {
+    toast(`${courtById(t.courtId).name}는 ${WD[t.weekday]}요일 그 시간에 이미 ${staffById(conflictTpl.coachId).name} 코치에게 배정되어 있습니다`);
+    return;
+  }
+  const payload = { coach_id:t.coachId, weekday:t.weekday, start_time:t.startTime, end_time:t.endTime, court_id:t.courtId, product_id:t.productId };
+  if (isEdit) {
+    const { error } = await sb.from('class_templates').update(payload).eq('id', t.editId);
+    if (error) { toast('저장 실패: '+error.message); return; }
+  } else {
+    const { error } = await sb.from('class_templates').insert(payload);
+    if (error) { toast('저장 실패: '+error.message); return; }
+  }
+  await addLog(null, '', `코트 배정 ${isEdit?'수정':'추가'}: ${staffById(t.coachId).name} 코치 · ${WD[t.weekday]} ${t.startTime}~${t.endTime} · ${courtById(t.courtId).name} · ${productById(t.productId).name}`);
+  const { data } = await sb.from('class_templates').select('*');
+  STATE.classTemplates = (data||[]).map(templateRowToState);
+  closeModal(); render();
+  toast(isEdit ? '코트 배정이 수정되었습니다' : '코트가 배정되었습니다');
+}
+async function deleteClassTemplate(id){
+  const { error } = await sb.from('class_templates').delete().eq('id', id);
+  if (error) { toast('삭제 실패: '+error.message); return; }
+  STATE.classTemplates = STATE.classTemplates.filter(t=>t.id!==id);
+  render();
+  toast('삭제되었습니다');
+}
+function productManagerView(){
+  let html = `<div style="padding:4px 18px 18px 18px;">`;
+  STATE.products.forEach(p=>{
+    html += `<div class="m-card" style="cursor:pointer;" onclick="openEditProductForm('${p.id}')">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-size:14px;font-weight:700;">${p.name}</div>
+        <span class="avail-pill" style="background:#eef0ff;color:#4338ca;">${p.mode==='monthly'?'월정기':'개인레슨'}</span>
+      </div>
+      <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-top:4px;">${p.price.toLocaleString()}원 · 정원 ${p.capacity}명 · ${p.mode==='monthly'?'월 '+p.ruleCount+'회':'총 '+p.ruleCount+'회권'}</div>
+      <div style="font-size:10px;color:#4f46e5;font-weight:700;margin-top:6px;">눌러서 수정 (예: 1:4 → 1:2로 정원 변경)</div>
+    </div>`;
+  });
+  html += `<div class="btn-secondary" style="margin-top:4px;" onclick="openAddProductForm()">+ 수강상품(정규반) 추가</div></div>`;
+  return html;
+}
+function openEditProductForm(productId){
+  const p = productById(productId);
+  STATE._editProduct = { id:p.id, name:p.name, mode:p.mode, price:String(p.price), capacity:String(p.capacity), ruleCount:String(p.ruleCount), validDays:String(p.validDays||90) };
+  renderEditProductForm();
+}
+function editProductField(key,val){ STATE._editProduct[key]=val; renderEditProductForm(); }
+function renderEditProductForm(){
+  const p = STATE._editProduct;
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:14px;">수강상품 수정</div>
+    <div class="field-label">방식</div>
+    <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <div class="chip-select ${p.mode==='monthly'?'on':''}" onclick="editProductField('mode','monthly')">월정기</div>
+      <div class="chip-select ${p.mode==='session_pack'?'on':''}" onclick="editProductField('mode','session_pack')">개인레슨(회차)</div>
+    </div>
+    <div class="field-label">상품명</div>
+    <input type="text" id="ep_name" value="${p.name}" oninput="STATE._editProduct.name=this.value" />
+    <div class="field-label" style="margin-top:12px;">가격(원)</div>
+    <input type="text" id="ep_price" value="${p.price}" oninput="STATE._editProduct.price=this.value" />
+    <div class="field-label" style="margin-top:12px;">정원(코트당 인원) — 1:4는 4, 1:2는 2</div>
+    <div style="display:flex;gap:6px;margin-bottom:4px;">
+      ${[1,2,3,4,5,6].map(n=>`<div class="chip-select ${String(n)===p.capacity?'on':''}" onclick="editProductField('capacity','${n}')">${n}</div>`).join('')}
+    </div>
+    <input type="text" id="ep_capacity" value="${p.capacity}" oninput="STATE._editProduct.capacity=this.value" style="margin-top:6px;" />
+    <div class="field-label" style="margin-top:12px;">${p.mode==='monthly'?'월 수업 횟수':'총 회차'}</div>
+    <input type="text" id="ep_rulecount" value="${p.ruleCount}" oninput="STATE._editProduct.ruleCount=this.value" />
+    ${p.mode==='session_pack' ? `<div class="field-label" style="margin-top:12px;">유효기간(일)</div><input type="text" id="ep_validdays" value="${p.validDays}" oninput="STATE._editProduct.validDays=this.value" />` : ''}
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:12px;font-size:11px;color:#92400e;margin-top:14px;line-height:1.6;">
+      정원을 바꾸면 이 상품을 쓰는 모든 정규수업 슬롯의 정원 계산에 즉시 반영됩니다. 이미 생성된 지난 수업 기록은 바뀌지 않습니다.
+    </div>
+    <div class="btn-primary" style="margin-top:16px;" onclick="submitEditProduct()">저장</div>
+  </div>`;
+  openModal(html);
+}
+async function submitEditProduct(){
+  const p = STATE._editProduct;
+  const name = (p.name||'').trim();
+  const price = parseInt(p.price)||0;
+  const capacity = parseInt(p.capacity)||1;
+  const ruleCount = parseInt(p.ruleCount)||1;
+  if (!name) { toast('상품명을 입력하세요'); return; }
+  let payload;
+  if (p.mode==='monthly') payload = { name, price, registration_mode:'monthly', session_rule_type:'fixed_count', session_rule_count: ruleCount, capacity };
+  else payload = { name, price, registration_mode:'session_pack', session_rule_count: ruleCount, capacity, pack_valid_days: parseInt(p.validDays)||90 };
+  const { data, error } = await sb.from('products').update(payload).eq('id', p.id).select().single();
+  if (error) { toast('저장 실패: '+error.message); return; }
+  const idx = STATE.products.findIndex(x=>x.id===p.id);
+  if (idx>=0) STATE.products[idx] = productRowToState(data);
+  await addLog(null, '', `수강상품 수정: ${name} (정원 ${capacity}명)`);
+  closeModal(); render();
+  toast('저장되었습니다');
+}
+function openAddProductForm(){
+  STATE._newProduct = {name:'', mode:'monthly', price:'', capacity:'', ruleCount:'', validDays:'90'};
+  renderAddProductForm();
+}
+function newProductField(key,val){ STATE._newProduct[key]=val; renderAddProductForm(); }
+function renderAddProductForm(){
+  const p = STATE._newProduct;
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:14px;">수강상품 추가</div>
+    <div class="field-label">방식</div>
+    <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <div class="chip-select ${p.mode==='monthly'?'on':''}" onclick="newProductField('mode','monthly')">월정기</div>
+      <div class="chip-select ${p.mode==='session_pack'?'on':''}" onclick="newProductField('mode','session_pack')">개인레슨(회차)</div>
+    </div>
+    <div class="field-label">상품명</div>
+    <input type="text" id="np_name" value="${p.name}" oninput="STATE._newProduct.name=this.value" placeholder="예: 1:3 월4회권" />
+    <div class="field-label" style="margin-top:12px;">가격(원)</div>
+    <input type="text" id="np_price" value="${p.price}" oninput="STATE._newProduct.price=this.value" placeholder="180000" />
+    <div class="field-label" style="margin-top:12px;">정원(코트당 인원)</div>
+    <input type="text" id="np_capacity" value="${p.capacity}" oninput="STATE._newProduct.capacity=this.value" placeholder="3" />
+    <div class="field-label" style="margin-top:12px;">${p.mode==='monthly'?'월 수업 횟수':'총 회차'}</div>
+    <input type="text" id="np_rulecount" value="${p.ruleCount}" oninput="STATE._newProduct.ruleCount=this.value" placeholder="4" />
+    ${p.mode==='session_pack' ? `<div class="field-label" style="margin-top:12px;">유효기간(일)</div><input type="text" id="np_validdays" value="${p.validDays}" oninput="STATE._newProduct.validDays=this.value" placeholder="90" />` : ''}
+    <div class="btn-primary" style="margin-top:16px;" onclick="submitAddProduct()">추가</div>
+  </div>`;
+  openModal(html);
+}
+
+function bulkImportView(){
+  const b = STATE._bulk || (STATE._bulk = { weekday:1, time:'18:00', coachId:(STATE.staff.find(s=>s.role==='coach')||{}).id, productId:(STATE.products.find(p=>p.mode==='monthly')||{}).id, courtId: STATE.courts[0]?.id, autoPay:true, text:'' });
+  const coaches = STATE.staff.filter(s=>s.role==='coach');
+  const products = STATE.products.filter(p=>p.mode==='monthly');
+  let html = `<div style="padding:4px 18px 18px 18px;">
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#1d4ed8;font-weight:600;line-height:1.6;">
+      기존 시트에서 같은 요일·시간·코치 아래에 있는 회원 명단을 통째로 복사해 붙여넣으면, 한 번에 같은 조건으로 등록됩니다. 시트의 다른 시간대는 아래 조건을 바꿔서 다시 붙여넣어 주세요.
+    </div>
+    <div class="field-label">요일</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${WD.map((d,i)=>`<div class="chip-select ${b.weekday===i?'on':''}" onclick="bulkField('weekday',${i})">${d}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">시간</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;max-height:110px;overflow-y:auto;">${OPERATING_HOURS.map(t=>`<div class="chip-select ${b.time===t?'on':''}" onclick="bulkField('time','${t}')">${t}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">담당 코치</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${coaches.map(c=>`<div class="chip-select ${b.coachId===c.id?'on':''}" onclick="bulkField('coachId','${c.id}')">${c.name}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">수강상품</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${products.map(p=>`<div class="chip-select ${b.productId===p.id?'on':''}" onclick="bulkField('productId','${p.id}')">${p.name}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">코트</div>
+    <select onchange="bulkField('courtId', this.value)">${STATE.courts.map(c=>`<option value="${c.id}" ${c.id===b.courtId?'selected':''}>${c.name}</option>`).join('')}</select>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:14px;">
+      <input type="checkbox" id="bulk_autopay" ${b.autoPay?'checked':''} onchange="bulkField('autoPay', this.checked)" style="width:16px;height:16px;" />
+      <span style="font-size:12px;color:#334155;font-weight:600;">이번 달 결제완료 처리 + 시간표 자동생성까지 진행</span>
+    </div>
+    <div class="field-label" style="margin-top:14px;">회원 명단 붙여넣기 (한 줄에 "이름 [탭 또는 콤마] 연락처")</div>
+    <textarea id="bulk_text" rows="8" oninput="STATE._bulk.text=this.value" style="width:100%;border:1px solid #e2e8f0;border-radius:10px;padding:11px 13px;font-size:13px;font-family:inherit;" placeholder="정소정	010-3383-5862
+박미진	010-9879-9223
+황진경	010-8311-4154">${b.text||''}</textarea>
+    <div class="btn-primary" style="margin-top:14px;" onclick="submitBulkImport()">일괄 등록 실행</div>
+  </div>`;
+  return html;
+}
+function bulkField(key,val){ STATE._bulk[key]=val; render(); }
+async function submitBulkImport(){
+  const b = STATE._bulk;
+  const lines = (b.text||'').split('\n').map(l=>l.trim()).filter(Boolean);
+  if (lines.length===0) { toast('회원 명단을 입력하세요'); return; }
+  const product = productById(b.productId);
+  if (!product) { toast('수강상품을 선택하세요'); return; }
+  if (!b.coachId) { toast('담당 코치를 선택하세요'); return; }
+  let success=0, fail=0;
+  const yearMonth = ym(fromISO(STATE.today));
+  for (const line of lines) {
+    const parts = line.split(/\t|,/).map(x=>x.trim()).filter(Boolean);
+    if (parts.length===0) continue;
+    const name = parts[0];
+    const phone = parts[1] || '';
+    try {
+      const { data: newMember, error: mErr } = await sb.from('members').insert({ name, phone, status:'active', memo:'' }).select().single();
+      if (mErr) { fail++; continue; }
+      STATE.members.push(rowToCamel(newMember));
+      if (b.autoPay) {
+        const { error } = await sb.rpc('add_monthly_slot', {
+          p_member_id: newMember.id, p_weekday: b.weekday, p_start_time: b.time, p_coach_id: b.coachId,
+          p_product_id: b.productId, p_court_id: b.courtId, p_year_month: yearMonth, p_amount: product.price, p_method: '계좌이체'
+        });
+        if (error) { fail++; continue; }
+      } else {
+        const { error } = await sb.from('member_slots').insert({
+          member_id: newMember.id, weekday: b.weekday, start_time: b.time, coach_id: b.coachId, product_id: b.productId, court_id: b.courtId
+        });
+        if (error) { fail++; continue; }
+      }
+      success++;
+    } catch(e) { fail++; }
+  }
+  await refreshAllDataQuiet();
+  STATE._bulk.text = '';
+  render();
+  toast(`${success}명 등록 완료${fail>0?`, ${fail}명 실패`:''}`);
+}
+
+function reportsView(){
+  const reportMonth = STATE.reportMonth || ym(fromISO(STATE.today));
+  const paidEnrs = STATE.enrollments.filter(e=>e.yearMonth===reportMonth && e.paymentStatus==='paid');
+  const pkgThisMonth = STATE.packages.filter(p=>p.purchasedAt && p.purchasedAt.slice(0,7)===reportMonth);
+  const totalRevenue = paidEnrs.reduce((a,e)=>a+(e.paymentAmount||0),0) + pkgThisMonth.reduce((a,p)=>a+(p.paymentAmount||0),0);
+
+  const byCoach = {};
+  paidEnrs.forEach(e=>{ const slot=slotById(e.slotId); if(!slot) return; byCoach[slot.coachId]=(byCoach[slot.coachId]||0)+(e.paymentAmount||0); });
+  pkgThisMonth.forEach(p=>{ byCoach[p.defaultCoachId]=(byCoach[p.defaultCoachId]||0)+(p.paymentAmount||0); });
+
+  const byProduct = {};
+  paidEnrs.forEach(e=>{ byProduct[e.productId]=(byProduct[e.productId]||0)+(e.paymentAmount||0); });
+  pkgThisMonth.forEach(p=>{ byProduct[p.productId]=(byProduct[p.productId]||0)+(p.paymentAmount||0); });
+
+  const byMethod = {};
+  paidEnrs.forEach(e=>{ const k=e.paymentMethod||'미지정'; byMethod[k]=(byMethod[k]||0)+(e.paymentAmount||0); });
+  pkgThisMonth.forEach(p=>{ const k=p.paymentMethod||'미지정'; byMethod[k]=(byMethod[k]||0)+(p.paymentAmount||0); });
+
+  const trend = [];
+  for (let i=5;i>=0;i--) {
+    const mth = addMonths(ym(fromISO(STATE.today)), -i);
+    const amt = STATE.enrollments.filter(e=>e.yearMonth===mth && e.paymentStatus==='paid').reduce((a,e)=>a+(e.paymentAmount||0),0)
+              + STATE.packages.filter(p=>p.purchasedAt && p.purchasedAt.slice(0,7)===mth).reduce((a,p)=>a+(p.paymentAmount||0),0);
+    trend.push({mth, amt});
+  }
+  const maxTrend = Math.max(1, ...trend.map(t=>t.amt));
+
+  let html = `<div style="padding:4px 18px 18px 18px;">
+    <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:14px;">
+      <span onclick="shiftReportMonth(-1)" style="cursor:pointer;">${ICONS.chevL}</span>
+      <span style="font-size:14px;font-weight:800;">${monthLabel(reportMonth)} 매출</span>
+      <span onclick="shiftReportMonth(1)" style="cursor:pointer;">${ICONS.chevR}</span>
+    </div>
+    <div class="m-card" style="text-align:center;">
+      <div style="font-size:11px;font-weight:700;color:#94a3b8;">이 달 총 매출</div>
+      <div style="font-size:24px;font-weight:800;margin-top:4px;">${totalRevenue.toLocaleString()}원</div>
+    </div>
+
+    <div style="font-size:12px;font-weight:700;color:#94a3b8;margin:16px 0 8px 0;">코치별 매출</div>`;
+  const coachEntries = Object.keys(byCoach).sort((a,b)=>byCoach[b]-byCoach[a]);
+  if (coachEntries.length===0) html += `<div style="font-size:13px;color:#94a3b8;">이 달 매출 내역이 없습니다.</div>`;
+  coachEntries.forEach(cid=>{
+    html += `<div class="m-card" style="display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:13px;font-weight:700;">${staffById(cid)?staffById(cid).name+' 코치':'미지정'}</span>
+      <span style="font-size:13px;font-weight:800;">${byCoach[cid].toLocaleString()}원</span>
+    </div>`;
+  });
+
+  html += `<div style="font-size:12px;font-weight:700;color:#94a3b8;margin:16px 0 8px 0;">수업(상품)별 매출</div>`;
+  Object.keys(byProduct).sort((a,b)=>byProduct[b]-byProduct[a]).forEach(pid=>{
+    html += `<div class="m-card" style="display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:13px;font-weight:700;">${productById(pid)?productById(pid).name:'-'}</span>
+      <span style="font-size:13px;font-weight:800;">${byProduct[pid].toLocaleString()}원</span>
+    </div>`;
+  });
+
+  html += `<div style="font-size:12px;font-weight:700;color:#94a3b8;margin:16px 0 8px 0;">결제수단별 내역</div>`;
+  Object.keys(byMethod).forEach(k=>{
+    html += `<div class="m-card" style="display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:13px;font-weight:700;">${k}</span>
+      <span style="font-size:13px;font-weight:800;">${byMethod[k].toLocaleString()}원</span>
+    </div>`;
+  });
+
+  html += `<div style="font-size:12px;font-weight:700;color:#94a3b8;margin:16px 0 8px 0;">최근 6개월 추이</div><div class="m-card">`;
+  trend.forEach(t=>{
+    const pct = Math.round((t.amt/maxTrend)*100);
+    html += `<div style="display:flex;align-items:center;gap:10px;padding:5px 0;">
+      <div style="font-size:11px;font-weight:700;width:52px;color:#64748b;">${t.mth.slice(5)}월</div>
+      <div class="gauge"><div style="width:${pct}%;background:#4f46e5;"></div></div>
+      <div style="font-size:11px;font-weight:700;width:76px;text-align:right;">${t.amt.toLocaleString()}원</div>
+    </div>`;
+  });
+  html += `</div></div>`;
+  return html;
+}
+function shiftReportMonth(n){ STATE.reportMonth = addMonths(STATE.reportMonth || ym(fromISO(STATE.today)), n); render(); }
+
+/* ============================== 모달/시트 ============================== */
+function closeModal(){ document.getElementById('modalLayer').innerHTML=''; }
+function openModal(html){ document.getElementById('modalLayer').innerHTML = `<div class="sheet-overlay" onclick="if(event.target===this)closeModal()"><div class="sheet" style="position:relative;">${html}</div></div>`; }
+
+function openSessionSheet(sessionId){
+  const s = sessionById(sessionId); const m = memberById(s.memberId); const coach = staffById(s.coachId);
+  const canMakeup = s.status==='absent' && !STATE.sessions.some(x=>x.linkedSessionId===s.id);
+  let html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;">${m?m.name:'-'}</div>
+    <div style="font-size:12px;color:#94a3b8;font-weight:600;margin-top:2px;">${s.date} ${s.startTime} · ${coach?coach.name:'-'} 코치 ${courtById(s.courtId)?'· '+courtById(s.courtId).name:''}</div>
+    <div style="margin-top:10px;"><span class="status-badge st-${s.status}">${statusIcon(s.status)}${STATUS_LABEL[s.status]}</span></div>
+    <div style="font-size:11px;font-weight:800;color:#94a3b8;margin-top:18px;margin-bottom:8px;">출결 처리</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="btn-secondary" onclick="setSessionStatus('${s.id}','attended')">출석 처리</div>
+      <div class="btn-secondary" onclick="markAbsentThenAsk('${s.id}')">결석 처리</div>
+      ${canMakeup ? `<div class="btn-secondary" style="background:#fff7ed;color:#c2410c;border-color:#fed7aa;" onclick="openMakeupPicker('${s.id}')">보강 잡기</div>` : ''}
+      <div class="btn-secondary" style="opacity:.6;" onclick="closeModal();openMemberSheet('${m.id}')">회원 정보 보기</div>
+    </div>
+  </div>`;
+  openModal(html);
+}
+
+async function markAbsentThenAsk(sessionId){
+  await setSessionStatus(sessionId, 'absent');
+  const s = sessionById(sessionId); const m = memberById(s.memberId);
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px;">${m?m.name:''} 결석 처리했습니다</div>
+    <div style="font-size:12px;color:#94a3b8;font-weight:600;margin-bottom:18px;">${s.date} ${s.startTime} 수업</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="btn-primary" onclick="openMakeupPicker('${s.id}')">보강 바로 잡기</div>
+      <div class="btn-secondary" onclick="closeModal()">다음에 하기</div>
+    </div>
+  </div>`;
+  openModal(html);
+}
+
+function openMoveSession(sessionId){
+  const s = sessionById(sessionId);
+  const canEditSlot = !!s.sourceSlotId;
+  const coaches = STATE.staff.filter(x=>x.role==='coach');
+  let html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:14px;">수업 이동</div>
+    <div class="field-label">날짜 (이번 달·다음 달 등 원하는 날짜 아무 곳이나 선택 가능)</div>
+    <input type="date" id="mv_date" value="${s.date}" />
+    <div class="field-label" style="margin-top:12px;">시간</div>
+    <select id="mv_time">${OPERATING_HOURS.map(t=>`<option value="${t}" ${t===s.startTime?'selected':''}>${t}</option>`).join('')}</select>
+    <div class="field-label" style="margin-top:12px;">담당 코치</div>
+    <select id="mv_coach">${coaches.map(c=>`<option value="${c.id}" ${c.id===s.coachId?'selected':''}>${c.name}</option>`).join('')}</select>
+    <div class="field-label" style="margin-top:12px;">코트</div>
+    <select id="mv_court">${STATE.courts.map(c=>`<option value="${c.id}" ${c.id===s.courtId?'selected':''}>${c.name}</option>`).join('')}</select>
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:12px;font-size:11px;color:#92400e;margin-top:14px;line-height:1.6;">
+      "이번 수업만"은 이 날짜 한 건만 바뀌고 회원의 기본 수업시간은 그대로 유지됩니다. "기본 수업시간 자체 변경"은 앞으로 계속 이 시간으로 바뀝니다.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px;">
+      <div class="btn-primary" onclick="changeOnlyThisSession('${s.id}', document.getElementById('mv_date').value, document.getElementById('mv_time').value, document.getElementById('mv_court').value, document.getElementById('mv_coach').value)">이번 수업만 변경</div>
+      ${canEditSlot
+        ? `<div class="btn-secondary" onclick="openEditSlotForm('${s.sourceSlotId}')">기본 수업시간 자체 변경</div>`
+        : `<div class="btn-secondary" style="opacity:.5;">이 수업은 기본슬롯에서 생성되지 않아 여기서 기본시간 변경 불가</div>`}
+    </div>
+  </div>`;
+  openModal(html);
+}
+
+function openMakeupPicker(absentSessionId){
+  const s = sessionById(absentSessionId);
+  const coaches = STATE.staff.filter(x=>x.role==='coach');
+  let html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px;">보강 잡기</div>
+    <div style="font-size:12px;color:#94a3b8;font-weight:600;margin-bottom:14px;">${s.date} ${s.startTime} 결석 대체</div>
+    <div class="field-label">보강 날짜</div>
+    <input type="date" id="mk_date" value="${toISO(addDays(fromISO(STATE.today),1))}" />
+    <div class="field-label" style="margin-top:12px;">보강 시간</div>
+    <select id="mk_time"><option>18:00</option><option selected>19:00</option><option>20:00</option><option>21:00</option></select>
+    <div class="field-label" style="margin-top:12px;">보강 코치</div>
+    <select id="mk_coach">${coaches.map(c=>`<option value="${c.id}" ${c.id===s.coachId?'selected':''}>${c.name}</option>`).join('')}</select>
+    <div class="field-label" style="margin-top:12px;">코트</div>
+    <select id="mk_court">${STATE.courts.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select>
+    <div class="btn-primary" style="margin-top:18px;" onclick="confirmMakeup('${s.id}', document.getElementById('mk_date').value, document.getElementById('mk_time').value, document.getElementById('mk_court').value, document.getElementById('mk_coach').value)">보강 확정</div>
+  </div>`;
+  openModal(html);
+}
+
+function openEditMemberMemo(memberId){
+  const m = memberById(memberId);
+  STATE._editMemo = { memberId, text: m.memo || '' };
+  renderEditMemberMemo();
+}
+function editMemberMemoInput(el){ STATE._editMemo.text = el.value; }
+function renderEditMemberMemo(){
+  const e = STATE._editMemo;
+  const m = memberById(e.memberId);
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px;">${m.name} 특이사항 메모</div>
+    <div style="font-size:12px;color:#94a3b8;font-weight:600;margin-bottom:14px;">코치 화면에도 함께 표시됩니다</div>
+    <textarea rows="4" oninput="editMemberMemoInput(this)" style="width:100%;border:1px solid #e2e8f0;border-radius:10px;padding:11px 13px;font-size:13px;font-family:inherit;resize:vertical;" placeholder="예: 오른쪽 무릎 통증 있음, 초보자">${e.text}</textarea>
+    <div class="btn-primary" style="margin-top:16px;" onclick="submitEditMemberMemo()">저장</div>
+  </div>`;
+  openModal(html);
+}
+async function submitEditMemberMemo(){
+  const e = STATE._editMemo;
+  const m = memberById(e.memberId);
+  const text = e.text.trim();
+  const { error } = await sb.from('members').update({ memo: text }).eq('id', e.memberId);
+  if (error) { toast('저장 실패: '+error.message); return; }
+  m.memo = text;
+  closeModal();
+  openMemberSheet(e.memberId);
+  toast('메모가 저장되었습니다');
+}
+function openAttendedDatesList(memberId){
+  const m = memberById(memberId);
+  const thisMonth = ym(fromISO(STATE.today));
+  const dates = STATE.sessions.filter(s=>s.memberId===memberId && s.status==='attended' && s.date.slice(0,7)===thisMonth).sort((a,b)=>a.date.localeCompare(b.date));
+  let html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px;">${m?m.name:''} · ${monthLabel(thisMonth)} 출석일</div>
+    <div style="font-size:12px;color:#94a3b8;font-weight:600;margin-bottom:14px;">이번 달 출석 처리된 날짜 ${dates.length}건</div>
+    <div style="display:flex;flex-direction:column;gap:6px;">`;
+  if (dates.length===0) html += `<div style="font-size:13px;color:#94a3b8;">출석 처리된 수업이 없습니다.</div>`;
+  dates.forEach(s=>{
+    html += `<div class="m-card" style="display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:13px;font-weight:700;">${s.date} (${WD[fromISO(s.date).getDay()]}) ${s.startTime}</span>
+      <span class="status-badge st-attended">${statusIcon('attended')}${STATUS_LABEL.attended}</span>
+    </div>`;
+  });
+  html += `</div></div>`;
+  openModal(html);
+}
+
+function openMemberFullHistory(memberId){
+  const m = memberById(memberId);
+  const all = STATE.sessions.filter(s=>s.memberId===memberId);
+  const byMonth = {};
+  all.forEach(s=>{ const mo = s.date.slice(0,7); (byMonth[mo]=byMonth[mo]||[]).push(s); });
+  const months = Object.keys(byMonth).sort().reverse();
+  let html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px;">${m?m.name:''} 전체 이력</div>
+    <div style="font-size:12px;color:#94a3b8;font-weight:600;margin-bottom:14px;">등록 이후 월별 수업 현황</div>
+    <div style="display:flex;flex-direction:column;gap:10px;">`;
+  if (months.length===0) html += `<div style="font-size:13px;color:#94a3b8;">수업 기록이 없습니다.</div>`;
+  months.forEach(mo=>{
+    const sessions = byMonth[mo];
+    const attended = sessions.filter(s=>s.status==='attended').length;
+    const absent = sessions.filter(s=>s.status==='absent').length;
+    const makeupSched = sessions.filter(s=>s.status==='makeup_scheduled').length;
+    const makeupDone = sessions.filter(s=>s.status==='makeup_completed').length;
+    const enrPaid = STATE.enrollments.filter(e=>e.memberId===memberId && e.yearMonth===mo && e.paymentStatus==='paid').reduce((a,e)=>a+(e.paymentAmount||0)-(e.discount||0),0);
+    html += `<div class="m-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span style="font-size:13px;font-weight:800;">${monthLabel(mo)}</span>
+        ${isOwner() && enrPaid>0 ? `<span style="font-size:12px;font-weight:800;color:#4f46e5;">${enrPaid.toLocaleString()}원</span>` : ''}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+        <div class="stat-tile"><div style="font-size:15px;font-weight:800;">${sessions.length}</div><div style="font-size:9px;color:#94a3b8;font-weight:700;margin-top:2px;">총 수업</div></div>
+        <div class="stat-tile"><div style="font-size:15px;font-weight:800;color:#15803d;">${attended}</div><div style="font-size:9px;color:#94a3b8;font-weight:700;margin-top:2px;">출석</div></div>
+        <div class="stat-tile"><div style="font-size:15px;font-weight:800;color:#b91c1c;">${absent}</div><div style="font-size:9px;color:#94a3b8;font-weight:700;margin-top:2px;">결석</div></div>
+      </div>
+      ${(makeupSched>0||makeupDone>0) ? `<div style="font-size:11px;color:#c2410c;font-weight:700;margin-top:8px;">보강예정 ${makeupSched}건 · 보강완료 ${makeupDone}건</div>` : ''}
+    </div>`;
+  });
+  html += `</div></div>`;
+  openModal(html);
+}
+
+function openMemberSheet(memberId){
+  const m = memberById(memberId); const slots = slotsOfMember(memberId); const hasPkg = memberHasPackage(memberId);
+  const thisMonth = ym(fromISO(STATE.today));
+  const all = STATE.sessions.filter(s=>s.memberId===memberId && s.date.slice(0,7)===thisMonth);
+  const attended = all.filter(s=>s.status==='attended').length;
+  const absent = all.filter(s=>s.status==='absent').length;
+  const scheduled = all.filter(s=>s.status==='scheduled').length;
+  const makeupSched = all.filter(s=>s.status==='makeup_scheduled').length;
+  const makeupDone = all.filter(s=>s.status==='makeup_completed').length;
+
+  let html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 4px 20px;display:flex;align-items:center;gap:12px;">
+    <div style="width:48px;height:48px;border-radius:50%;background:#4f46e5;color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;">${m.name[0]}</div>
+    <div>
+      <div style="font-size:17px;font-weight:800;">${m.name}</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:3px;">${ICONS.phone}<span style="font-size:12px;color:#64748b;font-weight:600;">${m.phone||'-'}</span></div>
+    </div>
+  </div>
+  <div style="padding:14px 20px 20px 20px;">`;
+
+  if (slots.length>0) {
+    html += `<div style="font-size:12px;font-weight:700;color:#94a3b8;margin-bottom:8px;">정규수업 등록 ${slots.length}건</div>`;
+    slots.forEach(slot=>{
+      const coach = staffById(slot.coachId), product = productById(slot.productId);
+      const paid = getSlotPaidStatus(slot.id, thisMonth);
+      html += `<div class="m-card" style="margin-bottom:10px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="font-size:13px;font-weight:800;">${WD[slot.weekday]} ${slot.time} · ${coach?coach.name:'-'} 코치</div>
+          <span class="avail-pill" style="background:${paid?'#f0fdf4':'#fef2f2'};color:${paid?'#15803d':'#b91c1c'};">${paid?'이번달 등록완료':'이번달 미등록'}</span>
+        </div>
+        <div class="row-label" style="margin-top:6px;">${product?product.name:''}</div>`;
+      if (isOwner()) {
+        const enr = STATE.enrollments.find(e=>e.slotId===slot.id && e.yearMonth===thisMonth);
+        if (enr) {
+          html += `<div style="background:#fdf4ff;border:1px solid #f3e8ff;border-radius:10px;padding:10px 12px;margin-top:10px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">${ICONS.lock}<span style="font-size:10px;font-weight:800;color:#7e22ce;">결제 정보 (관리자 전용)</span></div>
+            <div style="display:flex;justify-content:space-between;padding:2px 0;"><span class="row-label">결제금액</span><span class="row-value">${enr.paymentAmount?enr.paymentAmount.toLocaleString()+'원':'-'}${enr.discount?` <span style="color:#dc2626;">-${enr.discount.toLocaleString()}원</span>`:''}</span></div>
+            ${enr.discount ? `<div style="display:flex;justify-content:space-between;padding:2px 0;"><span class="row-label">실 결제액</span><span class="row-value" style="color:#7e22ce;">${(enr.paymentAmount-enr.discount).toLocaleString()}원</span></div>` : ''}
+            <div style="display:flex;justify-content:space-between;padding:2px 0;"><span class="row-label">결제일</span><span class="row-value">${enr.paymentDate||'-'}</span></div>
+            ${enr.paymentMethod ? `<div style="display:flex;justify-content:space-between;padding:2px 0;"><span class="row-label">결제수단</span><span class="row-value">${enr.paymentMethod}${enr.cardCompany?' · '+enr.cardCompany:''}</span></div>` : ''}
+          </div>`;
+        }
+      }
+      html += `<div class="btn-secondary" style="margin-top:10px;" onclick="openEditSlotForm('${slot.id}')">이 수업 기본시간 변경</div>
+      </div>`;
+    });
+
+    html += `<div style="font-size:12px;font-weight:700;color:#94a3b8;margin:14px 0 8px 0;">${monthLabel(thisMonth)} 수업 현황</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+      <div class="stat-tile"><div style="font-size:16px;font-weight:800;">${all.length}</div><div style="font-size:10px;color:#94a3b8;font-weight:700;margin-top:2px;">총 수업</div></div>
+      <div class="stat-tile" style="cursor:pointer;" onclick="openAttendedDatesList('${memberId}')"><div style="font-size:16px;font-weight:800;color:#15803d;">${attended}</div><div style="font-size:10px;color:#94a3b8;font-weight:700;margin-top:2px;">출석</div></div>
+      <div class="stat-tile"><div style="font-size:16px;font-weight:800;color:#b91c1c;">${absent}</div><div style="font-size:10px;color:#94a3b8;font-weight:700;margin-top:2px;">결석</div></div>
+      <div class="stat-tile"><div style="font-size:16px;font-weight:800;color:#1d4ed8;">${scheduled}</div><div style="font-size:10px;color:#94a3b8;font-weight:700;margin-top:2px;">예정</div></div>
+      <div class="stat-tile"><div style="font-size:16px;font-weight:800;color:#c2410c;">${makeupSched}</div><div style="font-size:10px;color:#94a3b8;font-weight:700;margin-top:2px;">보강예정</div></div>
+      <div class="stat-tile"><div style="font-size:16px;font-weight:800;color:#0f766e;">${makeupDone}</div><div style="font-size:10px;color:#94a3b8;font-weight:700;margin-top:2px;">보강완료</div></div>
+    </div>`;
+    if (m.memo) {
+      html += `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:12px 14px;margin-top:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-size:11px;font-weight:800;color:#b45309;">특이사항 메모</span>
+          ${isOwner() ? `<span style="font-size:11px;font-weight:700;color:#b45309;cursor:pointer;text-decoration:underline;" onclick="openEditMemberMemo('${memberId}')">수정</span>` : ''}
+        </div>
+        <div style="font-size:13px;color:#78350f;font-weight:500;">${m.memo}</div>
+      </div>`;
+    } else if (isOwner()) {
+      html += `<div style="margin-top:14px;"><div class="btn-secondary" onclick="openEditMemberMemo('${memberId}')">+ 특이사항 메모 추가</div></div>`;
+    }
+    html += `<div style="display:flex;gap:8px;margin-top:16px;">
+      ${isOwner() ? `<div class="btn-secondary" style="flex:1;" onclick="closeModal();openAddSlotForm('${memberId}')">정규수업 추가 등록</div>
+      <div class="btn-secondary" style="flex:1;" onclick="openMemberFullHistory('${memberId}')">전체 이력 보기</div>` : ''}
+    </div>`;
+  } else if (hasPkg) {
+    const disp = getPackageDisplay(memberId);
+    const coach = staffById(disp.coachId);
+    html += `<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+      <span class="avail-pill" style="background:#f0fdfa;color:#0f766e;">개인레슨 · ${coach?coach.name:'-'}</span>
+      <span class="avail-pill" style="background:#eef0ff;color:#4338ca;">잔여 ${disp.remaining}/${disp.total}회</span>
+    </div>`;
+    if (isOwner()) {
+      html += `<div style="background:#fdf4ff;border:1px solid #f3e8ff;border-radius:12px;padding:12px 14px;margin-top:6px;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">${ICONS.lock}<span style="font-size:11px;font-weight:800;color:#7e22ce;">결제 정보 (관리자 전용)</span></div>
+        <div style="display:flex;justify-content:space-between;padding:3px 0;"><span class="row-label">결제금액</span><span class="row-value">${disp.amount?disp.amount.toLocaleString()+'원':'-'}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:3px 0;"><span class="row-label">결제수단</span><span class="row-value">${disp.method||'-'}</span></div>
+      </div>`;
+    }
+    html += `<div class="btn-primary" style="margin-top:16px;" onclick="closeModal();openPackageBookingPicker('${memberId}')">레슨 세션 추가 예약</div>`;
+  } else {
+    html += `<div style="font-size:13px;color:#94a3b8;">등록된 수업이 없습니다.</div>`;
+  }
+  html += `</div>`;
+  openModal(html);
+}
+
+function openPackageBookingPicker(memberId){
+  const disp = getPackageDisplay(memberId);
+  let html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:14px;">개인레슨 세션 추가 (잔여 ${disp?disp.remaining:'-'}회)</div>
+    <div class="field-label">날짜</div>
+    <input type="date" id="pk_date" value="${toISO(addDays(fromISO(STATE.today),1))}" />
+    <div class="field-label" style="margin-top:12px;">시간</div>
+    <select id="pk_time"><option>18:00</option><option selected>19:00</option><option>20:00</option><option>21:00</option></select>
+    <div class="field-label" style="margin-top:12px;">코트</div>
+    <select id="pk_court">${STATE.courts.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select>
+    <div class="btn-primary" style="margin-top:18px;" onclick="bookPackageSession('${memberId}', document.getElementById('pk_date').value, document.getElementById('pk_time').value, document.getElementById('pk_court').value)">예약 확정</div>
+  </div>`;
+  openModal(html);
+}
+
+function openEditSlotForm(slotId){
+  const slot = slotById(slotId);
+  STATE._slotEdit = {slotId, weekday: slot.weekday, time: slot.time, coachId: slot.coachId, courtId: slot.courtId};
+  renderSlotEditor();
+}
+function slotEditField(key, val){ STATE._slotEdit[key] = val; renderSlotEditor(); }
+function renderSlotEditor(){
+  const se = STATE._slotEdit;
+  const coaches = STATE.staff.filter(s=>s.role==='coach');
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:14px;">기본 수업시간 변경</div>
+    <div class="field-label">요일</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${WD.map((d,i)=>`<div class="chip-select ${se.weekday===i?'on':''}" onclick="slotEditField('weekday',${i})">${d}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">시간</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${OPERATING_HOURS.map(t=>`<div class="chip-select ${se.time===t?'on':''}" onclick="slotEditField('time','${t}')">${t}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">담당 코치</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${coaches.map(c=>`<div class="chip-select ${se.coachId===c.id?'on':''}" onclick="slotEditField('coachId','${c.id}')">${c.name}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">코트</div>
+    <select onchange="slotEditField('courtId', this.value)">${STATE.courts.map(c=>`<option value="${c.id}" ${c.id===se.courtId?'selected':''}>${c.name}</option>`).join('')}</select>
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:12px;font-size:11px;color:#92400e;margin-top:14px;line-height:1.6;">
+      앞으로 계속 이 요일·시간·코치로 바뀝니다. 이미 생성된 이번 달 수업은 그대로 유지되고, 다음 결제완료 시부터 새 시간으로 생성됩니다.
+    </div>
+    <div class="btn-primary" style="margin-top:16px;" onclick="updateSlotDefaults('${se.slotId}', ${se.weekday}, '${se.time}', '${se.coachId}', '${se.courtId}')">기본 수업시간 저장</div>
+  </div>`;
+  openModal(html);
+}
+
+function openAddSlotForm(memberId){
+  STATE._addSlot = {memberId, weekday:2, time:'19:00', coachId:(STATE.staff.find(s=>s.role==='coach')||{}).id, productId:(STATE.products.find(p=>p.mode==='monthly')||{}).id, courtId: STATE.courts[0]?.id};
+  renderAddSlotForm();
+}
+function addSlotField(key, val){ STATE._addSlot[key]=val; renderAddSlotForm(); }
+function renderAddSlotForm(){
+  const a = STATE._addSlot;
+  const m = memberById(a.memberId);
+  const coaches = STATE.staff.filter(s=>s.role==='coach');
+  const products = STATE.products.filter(p=>p.mode==='monthly');
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px;">정규수업 추가 등록</div>
+    <div style="font-size:12px;color:#94a3b8;font-weight:600;margin-bottom:14px;">${m.name} 회원 — 이미 있는 등록과 별개로 새 슬롯이 추가됩니다</div>
+    <div class="field-label">요일</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${WD.map((d,i)=>`<div class="chip-select ${a.weekday===i?'on':''}" onclick="addSlotField('weekday',${i})">${d}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">시간</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${OPERATING_HOURS.map(t=>`<div class="chip-select ${a.time===t?'on':''}" onclick="addSlotField('time','${t}')">${t}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">담당 코치</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${coaches.map(c=>`<div class="chip-select ${a.coachId===c.id?'on':''}" onclick="addSlotField('coachId','${c.id}')">${c.name}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">수강상품</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">${products.map(p=>{
+      const disc = computeBundleDiscount(a.memberId, p.id);
+      return `<div class="choice-card ${a.productId===p.id?'picked':''}" style="padding:12px 14px;" onclick="addSlotField('productId','${p.id}')">
+        <div style="flex:1;"><div style="font-size:13px;font-weight:800;">${p.name}</div><div style="font-size:12px;color:#64748b;font-weight:600;margin-top:2px;">${p.price.toLocaleString()}원 / 월${disc?` <span style="color:#dc2626;">-${disc.toLocaleString()}원 주2회할인</span>`:''}</div></div>
+        ${a.productId===p.id?ICONS.check.replace(/width="12" height="12"/,'width="16" height="16"').replace('currentColor','#4f46e5'):''}
+      </div>`;}).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">코트</div>
+    <select onchange="addSlotField('courtId', this.value)">${STATE.courts.map(c=>`<option value="${c.id}" ${c.id===a.courtId?'selected':''}>${c.name}</option>`).join('')}</select>
+    <div class="btn-primary" style="margin-top:18px;" onclick="addMonthlySlot('${a.memberId}', ${a.weekday}, '${a.time}', '${a.coachId}', '${a.productId}', '${a.courtId}')">결제완료 처리 → 시간표 자동 등록</div>
+  </div>`;
+  openModal(html);
+}
+
+/* ---------- 신규회원 등록 위저드 (관리자 전용) ---------- */
+function openNewMemberWizard(){
+  const defaultCoachId = (!isOwner() && STATE.myStaffId) ? STATE.myStaffId : (STATE.staff.find(s=>s.role==='coach')||{}).id;
+  STATE._wizard = {step:1, mode:'monthly', name:'', phone:'', weekday:2, time:'19:00',
+    coachId:defaultCoachId, productId:(STATE.products.find(p=>p.mode==='monthly')||{}).id, courtId: STATE.courts[0]?.id,
+    packageCoachId:defaultCoachId, paid:false, payMethod:'계좌이체', cardCompany:'', expectedReceivedBy:defaultCoachId, expectedTransferName:''};
+  renderWizard();
+}
+function wz(){ return STATE._wizard; }
+function wizardNext(){ if (wz().step===1 && !wz().name.trim()) return; wz().step++; renderWizard(); }
+function wizardBack(){ wz().step--; if (wz().step<1){ closeModal(); return; } renderWizard(); }
+function wizardSetMode(mode){ wz().mode = mode; renderWizard(); }
+function wizardField(key, val){ wz()[key] = val; renderWizard(); }
+function wizardInput(key, el){
+  wz()[key] = el.value;
+  const id = el.id, pos = el.selectionStart;
+  renderWizard();
+  const ne = document.getElementById(id);
+  if (ne) { ne.focus(); try { ne.selectionStart = ne.selectionEnd = pos; } catch(e){} }
+}
+
+function renderWizard(){
+  const w = wz();
+  const dots = `<div style="display:flex;align-items:center;gap:6px;"><span class="step-dot ${w.step>=1?'done':''}"></span><span class="step-dot ${w.step>=2?'done':''}"></span><span class="step-dot ${w.step>=3?'done':''}"></span><span style="font-size:11px;color:#94a3b8;font-weight:700;margin-left:6px;">${w.step} / 3</span></div>`;
+  let body = '';
+  if (w.step===1) {
+    body = `
+    <div>
+      <div class="field-label">이름</div>
+      <input id="wz_name" type="text" value="${w.name}" oninput="wizardInput('name', this)" placeholder="예: 김하늘" />
+    </div>
+    <div style="margin-top:12px;">
+      <div class="field-label">연락처</div>
+      <input id="wz_phone" type="tel" value="${w.phone}" oninput="wizardInput('phone', this)" placeholder="010-0000-0000" />
+    </div>
+    <div style="margin-top:18px;">
+      <div class="field-label" style="margin-bottom:10px;">수업 방식을 선택하세요</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div class="choice-card ${w.mode==='monthly'?'picked':''}" onclick="wizardSetMode('monthly')">
+          ${ICONS.calendar.replace('currentColor', w.mode==='monthly'?'#4f46e5':'#64748b')}
+          <div style="flex:1;"><div style="font-size:14px;font-weight:800;">정규수업 (월정기)</div><div style="font-size:12px;color:#64748b;margin-top:3px;">매주 같은 요일·시간 · 1:4 / 1:2 레슨</div></div>
+          ${w.mode==='monthly'?ICONS.check.replace(/width="12" height="12"/,'width="18" height="18"').replace('currentColor','#4f46e5'):''}
+        </div>
+        <div class="choice-card ${w.mode==='package'?'picked':''}" onclick="wizardSetMode('package')">
+          ${ICONS.ticket.replace('currentColor', w.mode==='package'?'#4f46e5':'#64748b')}
+          <div style="flex:1;"><div style="font-size:14px;font-weight:800;">개인레슨 (1:1)</div><div style="font-size:12px;color:#64748b;margin-top:3px;">고정 요일 없이 회차권 구매 · 건별 예약</div></div>
+          ${w.mode==='package'?ICONS.check.replace(/width="12" height="12"/,'width="18" height="18"').replace('currentColor','#4f46e5'):''}
+        </div>
+      </div>
+    </div>`;
+  } else if (w.step===2 && w.mode==='monthly') {
+    const coaches = STATE.staff.filter(s=>s.role==='coach');
+    const products = STATE.products.filter(p=>p.mode==='monthly');
+    body = `
+    <div class="field-label">기본 요일</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${WD.map((d,i)=>`<div class="chip-select ${w.weekday===i?'on':''}" onclick="wizardField('weekday',${i})">${d}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:14px;">기본 시간</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${OPERATING_HOURS.map(t=>`<div class="chip-select ${w.time===t?'on':''}" onclick="wizardField('time','${t}')">${t}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:14px;">담당 코치</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${coaches.map(c=>`<div class="chip-select ${w.coachId===c.id?'on':''}" onclick="wizardField('coachId','${c.id}')">${c.name}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:14px;">코트</div>
+    <select onchange="wizardField('courtId', this.value)">${STATE.courts.map(c=>`<option value="${c.id}" ${c.id===w.courtId?'selected':''}>${c.name}</option>`).join('')}</select>
+    <div class="field-label" style="margin-top:14px;">수강상품</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">${products.map(p=>`
+      <div class="choice-card ${w.productId===p.id?'picked':''}" style="padding:12px 14px;" onclick="wizardField('productId','${p.id}')">
+        <div style="flex:1;"><div style="font-size:13px;font-weight:800;">${p.name}</div><div style="font-size:12px;color:#64748b;font-weight:600;margin-top:2px;">${p.price.toLocaleString()}원 / 월</div></div>
+        ${w.productId===p.id?ICONS.check.replace(/width="12" height="12"/,'width="16" height="16"').replace('currentColor','#4f46e5'):''}
+      </div>`).join('')}</div>`;
+  } else if (w.step===2 && w.mode==='package') {
+    const coaches = STATE.staff.filter(s=>s.role==='coach');
+    const product = STATE.products.find(p=>p.mode==='session_pack');
+    body = `
+    <div class="field-label">담당 코치</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${coaches.map(c=>`<div class="chip-select ${w.packageCoachId===c.id?'on':''}" onclick="wizardField('packageCoachId','${c.id}')">${c.name}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:14px;">상품</div>
+    ${product ? `<div class="choice-card picked" style="padding:12px 14px;">
+      <div style="flex:1;"><div style="font-size:13px;font-weight:800;">${product.name}</div><div style="font-size:12px;color:#64748b;font-weight:600;margin-top:2px;">${product.price.toLocaleString()}원 · 유효기간 ${product.validDays}일</div></div>
+      ${ICONS.check.replace(/width="12" height="12"/,'width="16" height="16"').replace('currentColor','#4f46e5')}
+    </div>` : `<div style="font-size:13px;color:#94a3b8;">개인레슨 상품이 아직 없습니다. 설정 &gt; 상품 관리에서 먼저 추가해주세요.</div>`}`;
+  } else if (w.step===3) {
+    const isMonthly = w.mode==='monthly';
+    const product = isMonthly ? productById(w.productId) : STATE.products.find(p=>p.mode==='session_pack');
+    const coach = isMonthly ? staffById(w.coachId) : staffById(w.packageCoachId);
+    body = `
+    <div class="m-card">
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;"><span class="row-label">이름</span><span class="row-value">${w.name||'-'}</span></div>
+      ${isMonthly ? `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;"><span class="row-label">요일/시간</span><span class="row-value">${WD[w.weekday]} ${w.time}</span></div>` : ''}
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;"><span class="row-label">담당코치</span><span class="row-value">${coach?coach.name:'-'}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;${isMonthly?'border-bottom:1px solid #f1f5f9;':''}"><span class="row-label">상품</span><span class="row-value">${product?product.name:'-'}</span></div>
+      ${isMonthly ? `<div style="display:flex;justify-content:space-between;padding:6px 0;"><span class="row-label">금액</span><span class="row-value">${product?product.price.toLocaleString():0}원</span></div>` : ''}
+    </div>
+    ${isMonthly ? (isOwner() ? `
+    <div class="field-label" style="margin-top:14px;">입금 상태</div>
+    <div style="display:flex;gap:6px;">
+      <div class="chip-select ${!w.paid?'on':''}" onclick="wizardField('paid', false)">미입금 (입금대기중)</div>
+      <div class="chip-select ${w.paid?'on':''}" onclick="wizardField('paid', true)">입금완료</div>
+    </div>
+    ${w.paid ? `
+    <div class="field-label" style="margin-top:12px;">결제수단</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <div class="chip-select ${w.payMethod==='계좌이체'?'on':''}" onclick="wizardField('payMethod','계좌이체')">계좌이체</div>
+      <div class="chip-select ${w.payMethod==='카드'?'on':''}" onclick="wizardField('payMethod','카드')">카드결제</div>
+      <div class="chip-select ${w.payMethod==='현장결제'?'on':''}" onclick="wizardField('payMethod','현장결제')">현장결제</div>
+    </div>
+    ${w.payMethod==='카드' ? `
+    <div class="field-label" style="margin-top:12px;">카드사</div>
+    <select onchange="wizardField('cardCompany', this.value)">
+      <option value="">선택 안함</option>
+      ${CARD_COMPANIES.map(c=>`<option value="${c}" ${w.cardCompany===c?'selected':''}>${c}</option>`).join('')}
+    </select>` : ''}
+    ` : ''}
+    <div style="font-size:11px;color:#94a3b8;margin-top:10px;line-height:1.6;">${w.paid ? `결제완료 처리 즉시 ${ym(fromISO(STATE.today))} 시간표에 자동 등록됩니다` : '가등록으로 자리는 지금 바로 배정되고, 시간표 생성은 결제관리에서 입금 확인 후 처리됩니다'}</div>`
+    : `
+    <div class="field-label" style="margin-top:14px;">예상 결제수단</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <div class="chip-select ${w.payMethod==='계좌이체'?'on':''}" onclick="wizardField('payMethod','계좌이체')">계좌이체</div>
+      <div class="chip-select ${w.payMethod==='카드'?'on':''}" onclick="wizardField('payMethod','카드')">카드결제</div>
+      <div class="chip-select ${w.payMethod==='현장결제'?'on':''}" onclick="wizardField('payMethod','현장결제')">현장결제</div>
+    </div>
+    ${w.payMethod==='카드' ? `
+    <div class="field-label" style="margin-top:12px;">결제 카드사</div>
+    <select onchange="wizardField('cardCompany', this.value)">
+      <option value="">선택 안함</option>
+      ${CARD_COMPANIES.map(c=>`<option value="${c}" ${w.cardCompany===c?'selected':''}>${c}</option>`).join('')}
+    </select>` : ''}
+    ${w.payMethod==='현장결제' ? `
+    <div class="field-label" style="margin-top:12px;">받은 사람</div>
+    <select onchange="wizardField('expectedReceivedBy', this.value)">
+      ${STATE.staff.map(s=>`<option value="${s.id}" ${w.expectedReceivedBy===s.id?'selected':''}>${s.name}</option>`).join('')}
+    </select>` : ''}
+    ${w.payMethod==='계좌이체' ? `
+    <div class="field-label" style="margin-top:12px;">입금자명</div>
+    <input type="text" value="${w.expectedTransferName||''}" oninput="wz().expectedTransferName=this.value" placeholder="예금주와 다른 경우 실제 입금자 이름" />` : ''}
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin-top:12px;font-size:11px;color:#64748b;line-height:1.6;">가등록으로 자리만 바로 배정되고, 입금 확인은 관리자가 결제관리에서 처리합니다. (위에서 고른 결제수단은 관리자에게 미리 안내되어 확인이 빨라집니다)</div>`)
+                : `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:12px 14px;margin-top:12px;font-size:11px;color:#92400e;line-height:1.6;">개인레슨(회차권)은 자동 시간표 생성이 없습니다. 결제완료 후 회원목록에서 "레슨 세션 추가"로 건별 예약하세요.</div>`}
+    `;
+  }
+
+  const canNext = w.step===1 ? (w.name.trim().length>0) : true;
+  const footer = w.step<3
+    ? `<div class="btn-primary ${canNext?'':'disabled'}" onclick="wizardNext()">다음</div>`
+    : `<div class="btn-primary" onclick="submitWizard()">${w.mode==='monthly'?(isOwner()?(w.paid?'결제완료 처리 → 시간표 자동 등록':'가등록 (자리만 우선 배정)'):'가등록 (자리만 우선 배정)'):'결제완료 처리 → 회차권 발급'}</div>`;
+
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+      ${w.step>1?`<span onclick="wizardBack()" style="cursor:pointer;">${ICONS.back}</span>`:''}
+      <div style="font-size:16px;font-weight:800;">신규 회원 등록</div>
+    </div>
+    ${dots}
+    <div style="margin-top:16px;display:flex;flex-direction:column;gap:2px;">${body}</div>
+    <div style="margin-top:20px;">${footer}</div>
+  </div>`;
+  openModal(html);
+}
+
+function submitWizard(){
+  const w = wz();
+  if (w.mode==='monthly') {
+    const paid = isOwner() && !!w.paid;
+    createNewMember({mode:'monthly', name:w.name||'신규회원', phone:w.phone||'', weekday:w.weekday, time:w.time, coachId:w.coachId, productId:w.productId, courtId: w.courtId||STATE.courts[0]?.id, yearMonth: ym(fromISO(STATE.today)), amount: productById(w.productId).price,
+      method: w.payMethod, cardCompany: w.cardCompany, paid,
+      expectedReceivedBy: w.payMethod==='현장결제'?w.expectedReceivedBy:null, expectedTransferName: w.payMethod==='계좌이체'?w.expectedTransferName:null});
+  } else {
+    createNewMember({mode:'package', name:w.name||'신규회원', phone:w.phone||'', coachId:w.packageCoachId, method:'카드'});
+  }
+}
+
+/* ============================== 시작 ============================== */
+showAuthScreen();
+</script>
+</body>
+</html>
