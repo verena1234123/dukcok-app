@@ -538,8 +538,8 @@ async function confirmPackagePaymentWithMethod(){
   toast('입금이 확인되었습니다');
 }
 
-async function addMonthlySlot(memberId, weekday, time, coachId, productId, courtId){
-  const conflict = monthlySlotConflict(weekday, time, courtId, coachId, productId);
+async function addMonthlySlot(memberId, weekday, time, coachId, productId, courtId, forceOverride){
+  const conflict = monthlySlotConflict(weekday, time, courtId, coachId, productId, forceOverride);
   if (conflict) { toast(conflict.detail); return; }
   const product = productById(productId);
   const yearMonth = ym(fromISO(STATE.today));
@@ -547,7 +547,7 @@ async function addMonthlySlot(memberId, weekday, time, coachId, productId, court
   const { error } = await sb.rpc('add_monthly_slot', {
     p_member_id: memberId, p_weekday: weekday, p_start_time: time, p_coach_id: coachId,
     p_product_id: productId, p_court_id: courtId, p_year_month: yearMonth, p_amount: product.price, p_method: '계좌이체',
-    p_discount: discount
+    p_discount: discount, p_force_override: !!forceOverride
   });
   if (error) { toast(error.message&&error.message.includes('court_conflict') ? '이 코트는 해당 요일·시간에 이미 다른 코치가 사용 중입니다' : '등록 실패: '+error.message); return; }
   await refreshAllDataQuiet();
@@ -750,7 +750,8 @@ async function addMonthlySlotForNewMember(memberId, payload){
     p_method: payload.paid ? payload.method : null,
     p_discount: discount, p_card_company: (payload.paid && payload.method==='카드') ? payload.cardCompany||null : null,
     p_expected_method: payload.paid?null:payload.method, p_expected_card_company: (!payload.paid && payload.method==='카드')?payload.cardCompany||null:null,
-    p_expected_received_by: payload.expectedReceivedBy||null, p_expected_transfer_name: payload.expectedTransferName||null
+    p_expected_received_by: payload.expectedReceivedBy||null, p_expected_transfer_name: payload.expectedTransferName||null,
+    p_force_override: !!payload.forceOverride
   });
   if (error) { toast(error.message&&error.message.includes('court_conflict') ? '이 코트는 해당 요일·시간에 이미 다른 코치가 사용 중입니다' : '등록 실패: '+error.message); return; }
   await refreshAllDataQuiet();
@@ -802,15 +803,30 @@ async function submitAddProduct(){
 }
 
 /* ============================== 잔여석 계산 ============================== */
+// 코트배정(class_templates)에 커스텀 정원(customCapacity)이 지정되어 있으면 그 요일·시간·코트·코치의
+// 정원은 상품 정원이 아니라 이 값을 따른다 — "동료학습반"처럼 5시간·7명 같은, 기존 1:4/1:2 상품 정원과
+// 다른 반을 상품 추가 없이 코트배정 화면에서 바로 만들 수 있게 하기 위함이다.
+function findTemplateFor(weekday, courtId, coachId, time){
+  return STATE.classTemplates.find(t=>t.weekday===weekday && t.courtId===courtId && t.coachId===coachId && templateHours(t).includes(time));
+}
+function effectiveCapacity(product, weekday, courtId, coachId, time){
+  const tpl = findTemplateFor(weekday, courtId, coachId, time);
+  if (tpl && tpl.customCapacity) return tpl.customCapacity;
+  return product ? product.capacity : null;
+}
 // 신규회원 정규수업 등록 시 그 요일·시간·코트가 이미 다른 코치 차지이거나 정원이 찼는지 확인한다.
 // 등록 자체를 처음부터 막기 위한 것으로, DB의 add_monthly_slot도 코트 충돌은 한 번 더 막아준다(이중 방어).
-function monthlySlotConflict(weekday, time, courtId, coachId, productId){
+// forceOverride가 true면(예: 2시간 1:2 레슨을 3명이 나눠 듣는 특수 배정) 정원초과 체크는
+// 건너뛴다 — 단, 다른 코치가 이미 그 코트를 쓰고 있는 경우는 예외 없이 그대로 막는다.
+function monthlySlotConflict(weekday, time, courtId, coachId, productId, forceOverride){
   const activeSlots = STATE.slots.filter(s=>s.weekday===weekday && s.time===time && s.courtId===courtId && s.active);
   const otherCoach = activeSlots.find(s=>s.coachId!==coachId);
   if (otherCoach) return { type:'court', detail:`이 코트는 ${WD[weekday]}요일 ${time}에 이미 ${staffById(otherCoach.coachId)?staffById(otherCoach.coachId).name:'다른'} 코치가 사용 중입니다` };
+  if (forceOverride) return null;
   const product = productById(productId);
+  const cap = effectiveCapacity(product, weekday, courtId, coachId, time);
   const sameGroup = activeSlots.filter(s=>s.coachId===coachId && s.productId===productId);
-  if (product && sameGroup.length >= product.capacity) return { type:'capacity', detail:`이 시간대는 이미 정원(${product.capacity}명)이 찼습니다` };
+  if (cap!=null && sameGroup.length >= cap) return { type:'capacity', detail:`이 시간대는 이미 정원(${cap}명)이 찼습니다` };
   return null;
 }
 function availabilityForWeekday(weekday){
@@ -833,8 +849,9 @@ function availabilityForWeekday(weekday){
     const used = grouped[key];
     const product = productById(productId);
     if (!product) return;
-    const remaining = product.capacity - used;
-    rows.push({time, courtId, coachId, productId, used, capacity: product.capacity, remaining});
+    const capacity = effectiveCapacity(product, weekday, courtId, coachId, time);
+    const remaining = capacity - used;
+    rows.push({time, courtId, coachId, productId, used, capacity, remaining});
   });
   rows.sort((a,b)=> a.time.localeCompare(b.time));
   return rows;
@@ -869,7 +886,7 @@ function availLabel(remaining){
 /* ============================== 렌더링 ============================== */
 function render(){
   const root = document.getElementById('appRoot');
-  const stickyExtra = STATE.tab==='timetable' ? timetableHeaderHtml() : (STATE.tab==='myinfo' ? myInfoHeaderHtml() : '');
+  const stickyExtra = STATE.tab==='timetable' ? timetableHeaderHtml() : (STATE.tab==='myinfo' ? myInfoHeaderHtml() : (STATE.tab==='members' ? membersHeaderHtml() : ''));
   root.innerHTML = '<div class="sticky-top-wrap">' + topbarHtml() + stickyExtra + '</div>'
     + '<div id="mainView">' + viewHtml() + '</div>' + bottomNavHtml() + fabHtml();
 }
@@ -1069,20 +1086,25 @@ function conflictsForDate(dateISO){
     if (s.courtId) coachTimeCourts[k].add(s.courtId);
   });
   const result = [];
+  const weekday = fromISO(dateISO).getDay();
   Object.keys(groups).forEach(key=>{
     const list = groups[key];
+    const [time, courtIdRaw] = key.split('|');
     const coaches = new Set(list.map(s=>s.coachId));
     let type = null, detail = '';
     if (coaches.size > 1) { type = 'conflict'; detail = '코트 중복배정 · 코치 겹침'; }
     const doubleBookedCoach = list.find(s=>{ const k=s.coachId+'|'+s.startTime; return coachTimeCourts[k] && coachTimeCourts[k].size>1; });
     if (doubleBookedCoach && !type) { type = 'conflict'; detail = `${staffById(doubleBookedCoach.coachId).name} 코치가 같은 시간 다른 코트에도 배정됨`; }
     const product = list[0] ? productForSession(list[0]) : null;
-    if (product && list.length > product.capacity) {
+    const cap = list[0] ? effectiveCapacity(product, weekday, courtIdRaw==='_none'?null:courtIdRaw, list[0].coachId, time) : null;
+    // 강제 정원초과(capacityOverride)로 등록된 자리는 의도적인 것이므로 경고 대상에서 뺀다
+    // (예: 2시간 1:2 레슨을 3명이 나눠 듣는 경우) — 코트/코치 겹침 문제는 이 예외와 무관하게 그대로 잡는다.
+    const allForced = list.length>0 && list.every(s=>s.capacityOverride);
+    if (cap!=null && list.length > cap && !allForced) {
       type = type || 'capacity';
-      detail = detail || `정원초과 ${list.length}/${product.capacity}`;
+      detail = detail || `정원초과 ${list.length}/${cap}`;
     }
     if (type) {
-      const [time, courtIdRaw] = key.split('|');
       result.push({ time, courtId: courtIdRaw==='_none'?null:courtIdRaw, type, detail, sessions:list });
     }
   });
@@ -1140,16 +1162,17 @@ function timetableView(){
       const product = list[0] ? productForSession(list[0]) : null;
       const tpl = list.length===0 ? STATE.classTemplates.find(x=>x.weekday===weekday && x.courtId===court.id && templateHours(x).includes(t)) : null;
       const repCoachId = list[0] ? list[0].coachId : (tpl ? tpl.coachId : null);
-      const overCap = !!(product && list.length>product.capacity);
+      const cap = effectiveCapacity(product, weekday, court.id, repCoachId, t);
+      const overCap = !!(cap!=null && list.length>cap) && !(list.length>0 && list.every(s=>s.capacityOverride));
       html += `<div class="m-card" style="padding:8px;height:100%;box-sizing:border-box;margin-top:0;${warn?'border-color:#fca5a5;background:#fffafa;':''}">`;
       if (warn) {
-        const txt = warn==='conflict' ? (courtTimeWarnDetail[key] || '코트 중복배정 · 코치 겹침') : `정원초과 ${list.length}/${product?product.capacity:'-'}`;
+        const txt = courtTimeWarnDetail[key] || (warn==='conflict' ? '코트 중복배정 · 코치 겹침' : `정원초과 ${list.length}/${cap!=null?cap:'-'}`);
         html += `<div style="display:flex;align-items:center;gap:3px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:3px 5px;margin-bottom:6px;color:#b91c1c;cursor:pointer;" onclick="event.stopPropagation();openConflictDetail('${selected}','${key}')">
           <span style="display:flex;flex-shrink:0;">${ICONS.warn}</span><span style="font-size:9px;font-weight:700;line-height:1.3;">${txt} (수정)</span></div>`;
       }
       html += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:4px;border-radius:6px;overflow:hidden;${repCoachId?`background:${coachColor(repCoachId)};`:''}">
         <div style="min-width:0;overflow:hidden;font-size:11px;font-weight:800;white-space:nowrap;text-overflow:ellipsis;padding:2px 0 2px 7px;${repCoachId?`color:${coachTextColor(repCoachId)};`:'color:#0f172a;'}">${court.name}${repCoachId?' · '+staffById(repCoachId).name:''}</div>
-        ${list.length>0 ? `<span class="cap-badge ${overCap?'cap-warn':''}" style="font-size:9px;padding:2px 7px;flex-shrink:0;${repCoachId && !overCap ? `background:transparent;color:${coachTextColor(repCoachId)};` : ''}">${list.length}${product?'/'+product.capacity:''}</span>` : ''}
+        ${list.length>0 ? `<span class="cap-badge ${overCap?'cap-warn':''}" style="font-size:9px;padding:2px 7px;flex-shrink:0;${repCoachId && !overCap ? `background:transparent;color:${coachTextColor(repCoachId)};` : ''}">${list.length}${cap!=null?'/'+cap:''}</span>` : ''}
       </div>`;
       if (list.length===0) {
         html += `<div style="color:#cbd5e1;font-size:11px;font-weight:600;">비어있음</div>`;
@@ -1329,12 +1352,13 @@ function addClassView(){
       const product = list[0] ? productForSession(list[0]) : null;
       const tpl = STATE.classTemplates.find(x=>x.weekday===weekday && x.courtId===court.id && templateHours(x).includes(t));
       const repCoachId = list[0] ? list[0].coachId : (tpl ? tpl.coachId : null);
+      const cap = effectiveCapacity(product, weekday, court.id, repCoachId, t);
       const activeCount = list.filter(s=>s.status!=='cancelled' && s.status!=='absent').length;
-      const canFillMore = list.length===0 || (product && activeCount < product.capacity);
+      const canFillMore = list.length===0 || (cap!=null && activeCount < cap);
       html += `<div class="m-card" style="padding:8px;height:100%;box-sizing:border-box;margin-top:0;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:4px;border-radius:6px;overflow:hidden;${repCoachId?`background:${coachColor(repCoachId)};`:''}">
           <div style="min-width:0;overflow:hidden;font-size:11px;font-weight:800;white-space:nowrap;text-overflow:ellipsis;padding:2px 0 2px 7px;${repCoachId?`color:${coachTextColor(repCoachId)};`:'color:#0f172a;'}">${court.name}${repCoachId?' · '+staffById(repCoachId).name:''}</div>
-          ${list.length>0 ? `<span class="cap-badge" style="font-size:9px;padding:2px 7px;flex-shrink:0;${repCoachId?`background:transparent;color:${coachTextColor(repCoachId)};`:''}">${list.length}${product?'/'+product.capacity:''}</span>` : ''}
+          ${list.length>0 ? `<span class="cap-badge" style="font-size:9px;padding:2px 7px;flex-shrink:0;${repCoachId?`background:transparent;color:${coachTextColor(repCoachId)};`:''}">${list.length}${cap!=null?'/'+cap:''}</span>` : ''}
         </div>`;
       if (canFillMore) {
         html += `<div style="color:#4f46e5;font-size:10px;font-weight:800;cursor:pointer;margin-top:2px;" onclick="openFillSlotPicker('${selected}','${t}','${court.id}',${repCoachId?`'${repCoachId}'`:'null'})">+ 보강 회원 배정</div>`;
@@ -1864,12 +1888,14 @@ async function confirmPersonalSlotProvisional(){
 }
 
 /* ---------- 3) 회원목록 ---------- */
-function membersView(){
+// 시간표/내수업 탭과 같은 방식으로, 회원 검색창+필터는 render()의 sticky-top-wrap 안에 넣어서
+// 목록을 스크롤해도 항상 눌러서 검색할 수 있게 고정한다 (membersHeaderHtml, render()에서 사용).
+function membersHeaderHtml(){
   const q = STATE.memberQuery || '';
   const filter = STATE.memberFilter || 'all';
   const coachFilter = STATE.memberCoachFilter || 'all';
   const coaches = activeCoaches();
-  let html = `<div style="padding:14px 18px;">
+  return `<div style="padding:14px 18px 10px 18px;border-top:1px solid #f1f5f9;background:#fff;">
     <div style="font-size:16px;font-weight:800;margin-bottom:10px;">회원목록 (${STATE.members.length}명)</div>
     <div style="display:flex;align-items:center;gap:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:9px 12px;">
       <span style="display:flex;color:#94a3b8;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg></span>
@@ -1884,8 +1910,10 @@ function membersView(){
       <div class="chip-select ${coachFilter==='all'?'on':''}" style="${coachFilter==='all'?'':'background:#eef0ff;color:#4338ca;'}" onclick="setMemberCoachFilter('all')">전체 코치</div>
       ${coaches.map(c=>`<div class="chip-select ${coachFilter===c.id?'on':''}" style="${coachFilter===c.id?'':`background:${coachColor(c.id)};color:${coachTextColor(c.id)};`}" onclick="setMemberCoachFilter('${c.id}')">${c.name}</div>`).join('')}
     </div>
-  </div><div id="membersListBox" style="padding:0 18px;">${membersListHtml()}</div>`;
-  return html;
+  </div>`;
+}
+function membersView(){
+  return `<div id="membersListBox" style="padding:14px 18px;">${membersListHtml()}</div>`;
 }
 // 회원 검색창은 입력할 때마다 이 목록 부분만 갱신한다 — 전체를 다시 그리면(render())
 // 입력 중이던 한글 조합이 끊겨서 자모가 풀어져 나오는 문제가 있었다(예: 백정미 → ㅂㅐㄱㅈㅓㅇㅁㅣ)
@@ -2335,7 +2363,7 @@ function openAddCourtForm(){
 function classTemplateManagerView(){
   let html = `<div style="padding:4px 18px 18px 18px;">
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#1d4ed8;font-weight:600;line-height:1.6;">
-      코치가 어느 요일·시간에 어느 코트에서 어떤 상품(1:4/1:2) 수업을 하는지 여기서 먼저 배정해두면, 회원이 아직 한 명도 없어도 잔여석 현황판에 빈 자리로 바로 나타납니다.
+      코치가 어느 요일·시간에 어느 코트에서 어떤 상품(1:4/1:2) 수업을 하는지 여기서 먼저 배정해두면, 회원이 아직 한 명도 없어도 잔여석 현황판에 빈 자리로 바로 나타납니다. 동료학습반처럼 상품 정원과 다른 인원을 받는 반은 "커스텀 정원"에 원하는 인원을 직접 적으면, 시간·정원을 자유롭게 정한 반을 언제든 새로 만들 수 있습니다.
     </div>`;
   const coachList = activeCoaches();
   coachList.forEach(c=>{
@@ -2345,7 +2373,7 @@ function classTemplateManagerView(){
       ${templates.length===0 ? `<div style="font-size:12px;color:#94a3b8;">배정된 시간이 없습니다.</div>` : templates.map(t=>{
         const product = productById(t.productId);
         return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid #f1f5f9;">
-          <span style="font-size:12px;font-weight:700;">${WD[t.weekday]} ${t.startTime}~${t.endTime} · ${courtById(t.courtId)?courtById(t.courtId).name:'-'} · ${product?product.name.split(' ')[0]:'-'}</span>
+          <span style="font-size:12px;font-weight:700;">${WD[t.weekday]} ${t.startTime}~${t.endTime} · ${courtById(t.courtId)?courtById(t.courtId).name:'-'} · ${product?product.name.split(' ')[0]:'-'}${t.customCapacity?` · 정원 ${t.customCapacity}명(커스텀)`:''}</span>
           <span style="display:flex;align-items:center;gap:12px;">
             <span style="font-size:11px;color:#4f46e5;font-weight:700;cursor:pointer;" onclick="openEditTemplateForm('${t.id}')">수정</span>
             <span style="font-size:11px;color:#b91c1c;font-weight:700;cursor:pointer;" onclick="deleteClassTemplate('${t.id}')">삭제</span>
@@ -2359,13 +2387,13 @@ function classTemplateManagerView(){
 }
 function openAddTemplateForm(){
   const coaches = activeCoaches();
-  STATE._newTemplate = { editId:null, coachId:(coaches[0]||{}).id, weekday:1, startTime:'18:00', endTime:'19:00', courtId:STATE.courts[0]?.id, productId:(STATE.products.find(p=>p.mode==='monthly')||{}).id };
+  STATE._newTemplate = { editId:null, coachId:(coaches[0]||{}).id, weekday:1, startTime:'18:00', endTime:'19:00', courtId:STATE.courts[0]?.id, productId:(STATE.products.find(p=>p.mode==='monthly')||{}).id, customCapacity:'' };
   renderAddTemplateForm();
 }
 function openEditTemplateForm(id){
   const t = STATE.classTemplates.find(x=>x.id===id);
   if (!t) return;
-  STATE._newTemplate = { editId:t.id, coachId:t.coachId, weekday:t.weekday, startTime:t.startTime, endTime:t.endTime, courtId:t.courtId, productId:t.productId };
+  STATE._newTemplate = { editId:t.id, coachId:t.coachId, weekday:t.weekday, startTime:t.startTime, endTime:t.endTime, courtId:t.courtId, productId:t.productId, customCapacity:t.customCapacity?String(t.customCapacity):'' };
   renderAddTemplateForm();
 }
 function newTemplateField(key,val){ STATE._newTemplate[key]=val; renderAddTemplateForm(); }
@@ -2390,6 +2418,9 @@ function renderAddTemplateForm(){
     <select onchange="newTemplateField('courtId', this.value)">${STATE.courts.map(c=>`<option value="${c.id}" ${c.id===t.courtId?'selected':''}>${c.name}</option>`).join('')}</select>
     <div class="field-label" style="margin-top:12px;">수강상품</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">${products.map(p=>`<div class="chip-select ${t.productId===p.id?'on':''}" onclick="newTemplateField('productId','${p.id}')">${p.name}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">커스텀 정원 (선택)</div>
+    <input type="text" inputmode="numeric" value="${t.customCapacity||''}" oninput="STATE._newTemplate.customCapacity=this.value" placeholder="비워두면 상품 정원을 그대로 씁니다" />
+    <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-top:6px;line-height:1.6;">동료학습반처럼 상품 정원과 다른 인원을 받는 특수 반이면 여기에 실제 정원을 적으세요 (예: 7). 시간은 위 시작~종료 시간으로 몇 시간이든 자유롭게 배정할 수 있습니다.</div>
     <div class="btn-primary" style="margin-top:16px;" onclick="submitAddTemplate()">${isEdit?'저장하기':'배정하기'}</div>
   </div>`;
   openModal(html);
@@ -2405,7 +2436,8 @@ async function submitAddTemplate(){
     toast(`${courtById(t.courtId).name}는 ${WD[t.weekday]}요일 그 시간에 이미 ${staffById(conflictTpl.coachId).name} 코치에게 배정되어 있습니다`);
     return;
   }
-  const payload = { coach_id:t.coachId, weekday:t.weekday, start_time:t.startTime, end_time:t.endTime, court_id:t.courtId, product_id:t.productId };
+  const customCapacity = t.customCapacity ? parseInt(t.customCapacity)||null : null;
+  const payload = { coach_id:t.coachId, weekday:t.weekday, start_time:t.startTime, end_time:t.endTime, court_id:t.courtId, product_id:t.productId, custom_capacity: customCapacity };
   if (isEdit) {
     const { error } = await sb.from('class_templates').update(payload).eq('id', t.editId);
     if (error) { toast('저장 실패: '+error.message); return; }
@@ -2765,8 +2797,7 @@ function reportsView(){
   trend.forEach(t=>{
     const pct = Math.round((t.amt/maxTrend)*100);
     html += `<div style="display:flex;align-items:center;gap:10px;padding:5px 0;">
-      <div style="font-size:11px;font-weight:700;width:52px;color:#64748b;">${t.mth.slice(5)}월</div>
-      <div class="gauge"><div style="width:${pct}%;background:#4f46e5;"></div></div>
+      <div style="font-size:11px;font-weight:700;width:52px;color:#64748b;">${t.mth.slice(5)}월</div>      <div class="gauge"><div style="width:${pct}%;background:#4f46e5;"></div></div>
       <div style="font-size:11px;font-weight:700;width:76px;text-align:right;">${t.amt.toLocaleString()}원</div>
     </div>`;
   });
@@ -2782,6 +2813,7 @@ function openModal(html){ document.getElementById('modalLayer').innerHTML = `<di
 function openSessionSheet(sessionId){
   const s = sessionById(sessionId); const m = memberById(s.memberId); const coach = staffById(s.coachId);
   const canMakeup = s.status==='absent' && !STATE.sessions.some(x=>x.linkedSessionId===s.id);
+  const isMakeup = s.status==='makeup_scheduled';
   let html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
   <div style="padding:6px 20px 20px 20px;">
     <div style="font-size:16px;font-weight:800;">${m?m.name:'-'}</div>
@@ -2792,11 +2824,30 @@ function openSessionSheet(sessionId){
       <div class="btn-secondary" onclick="setSessionStatus('${s.id}','attended')">출석 처리</div>
       <div class="btn-secondary" onclick="markAbsentThenAsk('${s.id}')">결석 처리</div>
       ${canMakeup ? `<div class="btn-secondary" style="background:#fff7ed;color:#c2410c;border-color:#fed7aa;" onclick="openMakeupPicker('${s.id}')">보강 잡기</div>` : ''}
+      ${s.status!=='cancelled' ? `<div class="btn-secondary" onclick="closeModal();openMoveSession('${s.id}')">이 수업 이동</div>` : ''}
+      ${isMakeup ? `<div class="btn-secondary" style="background:#fef2f2;color:#b91c1c;border-color:#fecaca;" onclick="cancelMakeupSession('${s.id}')">보강 취소</div>` : ''}
       <div class="btn-secondary" style="opacity:.6;" onclick="closeModal();openMemberSheet('${m.id}')">회원 정보 보기</div>
     </div>
   </div>`;
   openModal(html);
 }
+// 잘못 잡은 보강을 취소한다 — 취소만 하면 끝이 아니라, 원래 있던 결석 건이 이 보강으로
+// 연결(linkedSessionId)돼 있었으므로 그 연결도 끊어서 보강자명단에 다시 "보강 대기"로 뜨게 한다.
+async function cancelMakeupSession(sessionId){
+  const s = sessionById(sessionId); const m = memberById(s.memberId);
+  const { error } = await sb.from('class_sessions').update({ status:'cancelled' }).eq('id', sessionId);
+  if (error) { toast('취소 실패: '+error.message); return; }
+  s.status = 'cancelled';
+  const orig = STATE.sessions.find(x=>x.linkedSessionId===s.id);
+  if (orig) {
+    await sb.from('class_sessions').update({ linked_session_id: null }).eq('id', orig.id);
+    orig.linkedSessionId = null;
+  }
+  await addLog(m?m.id:null, m?m.name:'', `${s.date} ${s.startTime} 보강 취소${orig?` (${orig.date} ${orig.startTime} 결석 → 다시 보강대기)`:''}`);
+  closeModal(); render();
+  toast('보강이 취소되었습니다');
+}
+
 async function markAbsentThenAsk(sessionId){
   await setSessionStatus(sessionId, 'absent');
   const s = sessionById(sessionId); const m = memberById(s.memberId);
@@ -3021,10 +3072,31 @@ function openMemberFullHistory(memberId){
   openModal(html);
 }
 
+function deleteMemberConfirm(memberId, name){
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:8px;">${name} 회원을 삭제할까요?</div>
+    <div style="font-size:12px;color:#94a3b8;font-weight:600;line-height:1.6;margin-bottom:18px;">회원목록과 시간표에서 사라집니다. 지난 수업·결제 기록은 그대로 남아있고, 나중에 다시 필요하면 관리자에게 문의해야 복구할 수 있습니다.</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="btn-primary" style="background:#b91c1c;" onclick="confirmDeleteMember('${memberId}','${name}')">삭제</div>
+      <div class="btn-secondary" onclick="closeModal()">취소</div>
+    </div>
+  </div>`;
+  openModal(html);
+}
+async function confirmDeleteMember(memberId, name){
+  const { error } = await sb.from('members').update({ status:'withdrawn' }).eq('id', memberId);
+  if (error) { toast('삭제 실패: '+error.message); return; }
+  STATE.members = STATE.members.filter(m=>m.id!==memberId);
+  await addLog(memberId, name, `회원 삭제`);
+  closeModal(); render();
+  toast(`${name} 회원이 삭제되었습니다`);
+}
 function openMemberSheet(memberId){
   const m = memberById(memberId); const slots = slotsOfMember(memberId); const hasPkg = memberHasPackage(memberId);
-  const thisMonth = ym(fromISO(STATE.today));
-  const all = STATE.sessions.filter(s=>s.memberId===memberId && s.date.slice(0,7)===thisMonth);
+  // "이번달"을 실제 오늘 날짜로 고정하면, 시간표에서 다른 달(예: 다음달) 날짜를 보다가 회원을 눌렀을 때도
+  // 항상 진짜 오늘 기준 등록상태만 보여서 헷갈렸다 — 지금 시간표에서 보고 있는 날짜의 달을 기준으로 삼는다.
+  const thisMonth = ym(fromISO(STATE.selectedDate || STATE.today));  const all = STATE.sessions.filter(s=>s.memberId===memberId && s.date.slice(0,7)===thisMonth);
   const attended = all.filter(s=>s.status==='attended').length;
   const absent = all.filter(s=>s.status==='absent').length;
   const scheduled = all.filter(s=>s.status==='scheduled').length;
@@ -3032,12 +3104,15 @@ function openMemberSheet(memberId){
   const makeupDone = all.filter(s=>s.status==='makeup_completed').length;
 
   let html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
-  <div style="padding:6px 20px 4px 20px;display:flex;align-items:center;gap:12px;">
-    <div style="width:48px;height:48px;border-radius:50%;background:#4f46e5;color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;">${m.name[0]}</div>
-    <div>
-      <div style="font-size:17px;font-weight:800;">${m.name}</div>
-      <div style="display:flex;align-items:center;gap:6px;margin-top:3px;">${ICONS.phone}<span style="font-size:12px;color:#64748b;font-weight:600;">${m.phone||'-'}</span></div>
+  <div style="padding:6px 20px 4px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+    <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+      <div style="width:48px;height:48px;border-radius:50%;background:#4f46e5;color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;flex-shrink:0;">${m.name[0]}</div>
+      <div style="min-width:0;">
+        <div style="font-size:17px;font-weight:800;">${m.name}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:3px;">${ICONS.phone}<span style="font-size:12px;color:#64748b;font-weight:600;">${m.phone||'-'}</span></div>
+      </div>
     </div>
+    ${isOwner() ? `<span style="font-size:11px;color:#b91c1c;font-weight:700;cursor:pointer;flex-shrink:0;" onclick="deleteMemberConfirm('${memberId}','${m.name}')">회원 삭제</span>` : ''}
   </div>
   <div style="padding:14px 20px 20px 20px;">`;
 
@@ -3049,7 +3124,7 @@ function openMemberSheet(memberId){
       html += `<div class="m-card" style="margin-bottom:10px;">
         <div style="display:flex;align-items:center;justify-content:space-between;">
           <div style="font-size:13px;font-weight:800;">${WD[slot.weekday]} ${slot.time} · ${coach?coach.name:'-'} 코치</div>
-          <span class="avail-pill" style="background:${paid?'#f0fdf4':'#fef2f2'};color:${paid?'#15803d':'#b91c1c'};">${paid?'이번달 등록완료':'이번달 미등록'}</span>
+          <span class="avail-pill" style="background:${paid?'#f0fdf4':'#fef2f2'};color:${paid?'#15803d':'#b91c1c'};">${monthLabel(thisMonth)} ${paid?'등록완료':'미등록'}</span>
         </div>
         <div class="row-label" style="margin-top:6px;">${product?product.name:''}</div>`;
       if (isOwner()) {
@@ -3162,7 +3237,7 @@ function renderSlotEditor(){
 }
 
 function openAddSlotForm(memberId){
-  STATE._addSlot = {memberId, weekday:2, time:'19:00', coachId:(activeCoaches()[0]||{}).id, productId:(STATE.products.find(p=>p.mode==='monthly')||{}).id, courtId: STATE.courts[0]?.id};
+  STATE._addSlot = {memberId, weekday:2, time:'19:00', coachId:(activeCoaches()[0]||{}).id, productId:(STATE.products.find(p=>p.mode==='monthly')||{}).id, courtId: STATE.courts[0]?.id, forceOverride:false};
   renderAddSlotForm();
 }
 function addSlotField(key, val){ STATE._addSlot[key]=val; renderAddSlotForm(); }
@@ -3190,8 +3265,12 @@ function renderAddSlotForm(){
       </div>`;}).join('')}</div>
     <div class="field-label" style="margin-top:12px;">코트</div>
     <select onchange="addSlotField('courtId', this.value)">${STATE.courts.map(c=>`<option value="${c.id}" ${c.id===a.courtId?'selected':''}>${c.name}</option>`).join('')}</select>
-    ${(()=>{ const conflict = monthlySlotConflict(a.weekday, a.time, a.courtId, a.coachId, a.productId); return conflict ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:12px 14px;margin-top:14px;font-size:12px;color:#b91c1c;font-weight:700;line-height:1.6;">${conflict.detail} — 다른 요일·시간·코트를 선택해주세요.</div>` : ''; })()}
-    <div class="btn-primary ${monthlySlotConflict(a.weekday, a.time, a.courtId, a.coachId, a.productId)?'disabled':''}" style="margin-top:18px;" onclick="addMonthlySlot('${a.memberId}', ${a.weekday}, '${a.time}', '${a.coachId}', '${a.productId}', '${a.courtId}')">결제완료 처리 → 시간표 자동 등록</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:14px;">
+      <input type="checkbox" ${a.forceOverride?'checked':''} onchange="addSlotField('forceOverride', this.checked)" style="width:16px;height:16px;flex-shrink:0;" />
+      <span style="font-size:12px;color:#334155;font-weight:600;">정원 초과를 허용합니다 (예: 2시간 동안 인원을 나눠 받는 특수 배정)</span>
+    </div>
+    ${(()=>{ const conflict = monthlySlotConflict(a.weekday, a.time, a.courtId, a.coachId, a.productId, a.forceOverride); return conflict ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:12px 14px;margin-top:14px;font-size:12px;color:#b91c1c;font-weight:700;line-height:1.6;">${conflict.detail} — 다른 요일·시간·코트를 선택해주세요.</div>` : ''; })()}
+    <div class="btn-primary ${monthlySlotConflict(a.weekday, a.time, a.courtId, a.coachId, a.productId, a.forceOverride)?'disabled':''}" style="margin-top:18px;" onclick="addMonthlySlot('${a.memberId}', ${a.weekday}, '${a.time}', '${a.coachId}', '${a.productId}', '${a.courtId}', ${!!a.forceOverride})">결제완료 처리 → 시간표 자동 등록</div>
   </div>`;
   openModal(html);
 }
@@ -3200,7 +3279,7 @@ function renderAddSlotForm(){
 function openNewMemberWizard(){
   const defaultCoachId = (!isOwner() && STATE.myStaffId) ? STATE.myStaffId : (activeCoaches()[0]||{}).id;
   STATE._wizard = {step:1, mode:'monthly', name:'', phone:'', weekday:2, time:'19:00',
-    coachId:defaultCoachId, productId:(STATE.products.find(p=>p.mode==='monthly')||{}).id, courtId: STATE.courts[0]?.id,
+    coachId:defaultCoachId, productId:(STATE.products.find(p=>p.mode==='monthly')||{}).id, courtId: STATE.courts[0]?.id, forceOverride:false,
     packageCoachId:defaultCoachId, paid:false, payMethod:'계좌이체', cardCompany:'', expectedReceivedBy:defaultCoachId, expectedTransferName:''};
   renderWizard();
 }
@@ -3208,7 +3287,7 @@ function wz(){ return STATE._wizard; }
 function wizardNext(){
   const w = wz();
   if (w.step===1 && !w.name.trim()) return;
-  if (w.step===2 && w.mode==='monthly' && monthlySlotConflict(w.weekday, w.time, w.courtId, w.coachId, w.productId)) { toast('이 요일·시간·코트는 등록할 수 없습니다'); return; }
+  if (w.step===2 && w.mode==='monthly' && monthlySlotConflict(w.weekday, w.time, w.courtId, w.coachId, w.productId, w.forceOverride)) { toast('이 요일·시간·코트는 등록할 수 없습니다'); return; }
   w.step++; renderWizard();
 }
 function wizardBack(){ wz().step--; if (wz().step<1){ closeModal(); return; } renderWizard(); }
@@ -3272,7 +3351,11 @@ function renderWizard(){
         <div style="flex:1;"><div style="font-size:13px;font-weight:800;">${p.name}</div><div style="font-size:12px;color:#64748b;font-weight:600;margin-top:2px;">${p.price.toLocaleString()}원 / 월</div></div>
         ${w.productId===p.id?ICONS.check.replace(/width="12" height="12"/,'width="16" height="16"').replace('currentColor','#4f46e5'):''}
       </div>`).join('')}</div>
-    ${(()=>{ const conflict = monthlySlotConflict(w.weekday, w.time, w.courtId, w.coachId, w.productId); return conflict ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:12px 14px;margin-top:14px;font-size:12px;color:#b91c1c;font-weight:700;line-height:1.6;">${conflict.detail} — 다른 요일·시간·코트를 선택해주세요.</div>` : ''; })()}`;
+    <div style="display:flex;align-items:center;gap:8px;margin-top:14px;">
+      <input type="checkbox" id="wz_force" ${w.forceOverride?'checked':''} onchange="wizardField('forceOverride', this.checked)" style="width:16px;height:16px;flex-shrink:0;" />
+      <span style="font-size:12px;color:#334155;font-weight:600;">정원 초과를 허용합니다 (예: 2시간 동안 인원을 나눠 받는 특수 배정)</span>
+    </div>
+    ${(()=>{ const conflict = monthlySlotConflict(w.weekday, w.time, w.courtId, w.coachId, w.productId, w.forceOverride); return conflict ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:12px 14px;margin-top:14px;font-size:12px;color:#b91c1c;font-weight:700;line-height:1.6;">${conflict.detail} — 다른 요일·시간·코트를 선택해주세요.</div>` : ''; })()}`;
   } else if (w.step===2 && w.mode==='package') {
     const coaches = activeCoaches();
     const product = STATE.products.find(p=>p.mode==='session_pack');
@@ -3321,7 +3404,7 @@ function renderWizard(){
   }
 
   const canNext = w.step===1 ? (w.name.trim().length>0)
-    : (w.step===2 && w.mode==='monthly') ? !monthlySlotConflict(w.weekday, w.time, w.courtId, w.coachId, w.productId)
+    : (w.step===2 && w.mode==='monthly') ? !monthlySlotConflict(w.weekday, w.time, w.courtId, w.coachId, w.productId, w.forceOverride)
     : true;
   const footer = w.step<3
     ? `<div class="btn-primary ${canNext?'':'disabled'}" onclick="wizardNext()">다음</div>`
@@ -3344,7 +3427,7 @@ function submitWizard(){
   const w = wz();
   if (w.mode==='monthly') {
     createNewMember({mode:'monthly', name:w.name||'신규회원', phone:w.phone||'', weekday:w.weekday, time:w.time, coachId:w.coachId, productId:w.productId, courtId: w.courtId||STATE.courts[0]?.id, yearMonth: ym(fromISO(STATE.today)), amount: productById(w.productId).price,
-      method: w.payMethod, cardCompany: w.cardCompany, paid: false,
+      method: w.payMethod, cardCompany: w.cardCompany, paid: false, forceOverride: !!w.forceOverride,
       expectedReceivedBy: w.payMethod==='현장결제'?w.expectedReceivedBy:null, expectedTransferName: w.payMethod==='계좌이체'?w.expectedTransferName:null});
   } else {
     createNewMember({mode:'package', name:w.name||'신규회원', phone:w.phone||'', coachId:w.packageCoachId,
