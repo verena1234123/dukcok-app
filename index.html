@@ -596,7 +596,8 @@ async function purchasePackage(memberId, coachId, method){
 }
 
 async function bookPackageSession(memberId, date, time, courtId){
-  const { error } = await sb.rpc('book_package_session', { p_member_id: memberId, p_date: date, p_start_time: time, p_court_id: courtId });  if (error) { toast('예약 실패: '+error.message); return; }
+  const { error } = await sb.rpc('book_package_session', { p_member_id: memberId, p_date: date, p_start_time: time, p_court_id: courtId });
+  if (error) { toast('예약 실패: '+error.message); return; }
   await refreshMemberSessions(memberId);
   await refreshMyPackageStatus();
   const m = memberById(memberId);
@@ -894,7 +895,9 @@ function availLabel(remaining){
   if (remaining <= 0) return {text:'마감', bg:'#fef2f2', color:'#b91c1c'};
   if (remaining === 1) return {text:'마감임박', bg:'#fffbeb', color:'#b45309'};
   return {text:'여유', bg:'#f0fdf4', color:'#15803d'};
-}/* ============================== 렌더링 ============================== */
+}
+
+/* ============================== 렌더링 ============================== */
 function render(){
   const root = document.getElementById('appRoot');
   const stickyExtra = STATE.tab==='timetable' ? timetableHeaderHtml() : (STATE.tab==='myinfo' ? myInfoHeaderHtml() : (STATE.tab==='members' ? membersHeaderHtml() : ''));
@@ -1024,7 +1027,7 @@ function fabHtml(){
 function viewHtml(){
   switch(STATE.tab){
     case 'timetable':
-      if (STATE.timetableMode==='add') return (STATE.addClassTab==='hours') ? addClassView() : makeupListView();
+      if (STATE.timetableMode==='add') return (STATE.addClassTab==='makeup') ? makeupListView() : addClassView();
       return timetableView();
     case 'availability': return availabilityView();
     case 'members': return membersView();
@@ -1044,7 +1047,7 @@ function timetableHeaderHtml(){
   const selected = STATE.selectedDate || STATE.today;
   const monthTitle = weekStart.getFullYear()+'년 '+(weekStart.getMonth()+1)+'월';
   const mode = STATE.timetableMode || 'view';
-  const addTab = STATE.addClassTab || 'makeup';
+  const addTab = STATE.addClassTab || 'hours';
   let html = `<div style="padding:10px 18px 0 18px;border-top:1px solid #f1f5f9;">
     <div style="display:flex;gap:6px;">
       <div class="chip-select ${mode==='view'?'on':''}" onclick="setTimetableMode('view')">시간표 보기</div>
@@ -1052,8 +1055,8 @@ function timetableHeaderHtml(){
     </div>`;
   if (mode==='add') {
     html += `<div style="display:flex;gap:6px;margin-top:8px;">
-      <div class="chip-select ${addTab==='makeup'?'on':''}" onclick="setAddClassTab('makeup')">보강자명단</div>
       <div class="chip-select ${addTab==='hours'?'on':''}" onclick="setAddClassTab('hours')">시간추가</div>
+      <div class="chip-select ${addTab==='makeup'?'on':''}" onclick="setAddClassTab('makeup')">보강자명단</div>
     </div>`;
   }
   html += `</div>`;
@@ -1123,7 +1126,13 @@ function conflictsForDate(dateISO){
   return result;
 }
 
-function timetableView(){
+// 같은 코트에서 같은 코치가 바로 앞/뒤 시간에도 이어지는지 확인한다 — 화요일 12~14시 이동선 코치
+// 반처럼 여러 시간에 걸친 하나의 수업을, 시간표에서 서로 이어진 것처럼 테두리로 연결해 보여주기 위함
+// (돈을 더 내고 2시간을 듣는 회원과, 1시간만 듣는 회원이 한 반에 섞여 있는 경우를 시각적으로 구분).
+function courtHourActiveCoach(groups, courtId, t){
+  const list = (groups[t+'|'+courtId]||[]).filter(s=>s.status!=='cancelled');
+  return list.length ? list[0].coachId : null;
+}function timetableView(){
   const selected = STATE.selectedDate || STATE.today;
   const daySessions = sessionsOnDate(selected);
 
@@ -1175,16 +1184,30 @@ function timetableView(){
       const repCoachId = list[0] ? list[0].coachId : (tpl ? tpl.coachId : null);
       const cap = effectiveCapacity(product, weekday, court.id, repCoachId, t);
       const overCap = !!(cap!=null && list.length>cap) && !(list.length>0 && list.every(s=>s.capacityOverride));
-      html += `<div class="m-card" style="padding:8px;height:100%;box-sizing:border-box;margin-top:0;${warn?'border-color:#fca5a5;background:#fffafa;':''}">`;
+      const classLabel = list[0] ? list[0].classLabel : null;
+      const linkedPrev = list.length>0 && repCoachId && courtHourActiveCoach(groups, court.id, hourMinusOne(t))===repCoachId;
+      const linkedNext = list.length>0 && repCoachId && courtHourActiveCoach(groups, court.id, hourPlusOne(t))===repCoachId;
+      let runHours = 1;
+      if (linkedNext && !linkedPrev) {
+        let probe = hourPlusOne(t);
+        while (courtHourActiveCoach(groups, court.id, probe)===repCoachId) { runHours++; probe = hourPlusOne(probe); }
+      }
+      html += `<div class="m-card" style="padding:8px;height:100%;box-sizing:border-box;margin-top:0;${warn?'border-color:#fca5a5;background:#fffafa;':((linkedPrev||linkedNext)?'border:2px solid #c7d2fe;background:#f5f6ff;':'')}">`;
       if (warn) {
         const txt = courtTimeWarnDetail[key] || (warn==='conflict' ? '코트 중복배정 · 코치 겹침' : `정원초과 ${list.length}/${cap!=null?cap:'-'}`);
         html += `<div style="display:flex;align-items:center;gap:3px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:3px 5px;margin-bottom:6px;color:#b91c1c;cursor:pointer;" onclick="event.stopPropagation();openConflictDetail('${selected}','${key}')">
           <span style="display:flex;flex-shrink:0;">${ICONS.warn}</span><span style="font-size:9px;font-weight:700;line-height:1.3;">${txt} (수정)</span></div>`;
       }
       html += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:4px;border-radius:6px;overflow:hidden;${repCoachId?`background:${coachColor(repCoachId)};`:''}">
-        <div style="min-width:0;overflow:hidden;font-size:11px;font-weight:800;white-space:nowrap;text-overflow:ellipsis;padding:2px 0 2px 7px;${repCoachId?`color:${coachTextColor(repCoachId)};`:'color:#0f172a;'}">${court.name}${repCoachId?' · '+staffById(repCoachId).name:''}</div>
-        ${list.length>0 ? `<span class="cap-badge ${overCap?'cap-warn':''}" style="font-size:9px;padding:2px 7px;flex-shrink:0;${repCoachId && !overCap ? `background:transparent;color:${coachTextColor(repCoachId)};` : ''}">${list.length}${cap!=null?'/'+cap:''}</span>` : ''}
+        <div style="min-width:0;overflow:hidden;font-size:11px;font-weight:800;white-space:nowrap;text-overflow:ellipsis;padding:2px 0 2px 7px;${repCoachId?`color:${coachTextColor(repCoachId)};`:'color:#0f172a;'}">${classLabel?classLabel+' · ':''}${court.name}${repCoachId?' · '+staffById(repCoachId).name:''}</div>
+        <span style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+          ${(linkedNext && !linkedPrev) ? `<span class="cap-badge" style="font-size:9px;padding:2px 6px;background:#eef0ff;color:#4338ca;">${runHours}시간</span>` : ''}
+          ${list.length>0 ? `<span class="cap-badge ${overCap?'cap-warn':''}" style="font-size:9px;padding:2px 7px;${repCoachId && !overCap ? `background:transparent;color:${coachTextColor(repCoachId)};` : ''}">${list.length}${cap!=null?'/'+cap:''}</span>` : ''}
+        </span>
       </div>`;
+      if (linkedPrev) {
+        html += `<div style="font-size:9px;color:#4338ca;font-weight:800;margin-bottom:4px;">↑ ${hourMinusOne(t)}부터 이어지는 수업</div>`;
+      }
       if (list.length===0) {
         html += `<div style="color:#cbd5e1;font-size:11px;font-weight:600;">비어있음</div>`;
       } else {
@@ -1193,10 +1216,14 @@ function timetableView(){
           html += `<div style="padding:5px 0;border-top:1px solid #f1f5f9;cursor:pointer;display:flex;align-items:center;gap:4px;" onclick="openSessionSheet('${s.id}')">
             <div style="flex:1;min-width:0;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m?m.name:'(삭제된 회원)'}${s.originType==='package_session'?' <span style=\"color:#0d9488;font-weight:600;\">개인</span>':''}</div>
             <span style="display:flex;align-items:center;gap:3px;flex-shrink:0;">
-              ${s.capacityOverride?'<span class="status-badge" style="color:#b45309;background:#fef3c7;border-color:#fde68a;font-size:9px;padding:2px 5px;">강제</span>':''}              <span class="status-badge st-${s.status}" style="font-size:9px;padding:2px 5px;">${statusIcon(s.status)}${STATUS_LABEL[s.status]}</span>
+              ${s.capacityOverride?'<span class="status-badge" style="color:#b45309;background:#fef3c7;border-color:#fde68a;font-size:9px;padding:2px 5px;">강제</span>':''}
+              <span class="status-badge st-${s.status}" style="font-size:9px;padding:2px 5px;">${statusIcon(s.status)}${STATUS_LABEL[s.status]}</span>
             </span>
           </div>`;
         });
+      }
+      if (linkedNext) {
+        html += `<div style="margin-top:6px;padding-top:5px;border-top:1px dashed #c7d2fe;font-size:9px;color:#4338ca;font-weight:800;text-align:center;">↓ ${hourPlusOne(t)}까지 이어짐</div>`;
       }
       html += `</div>`;
     });
@@ -1345,7 +1372,7 @@ function addClassView(){
 
   let html = `<div style="padding:14px 18px 6px 18px;">
     <div style="font-size:14px;font-weight:800;margin-bottom:4px;">시간 추가</div>
-    <div style="font-size:11px;color:#94a3b8;font-weight:600;">${selected.slice(5).replace('-','월 ')}일(${WD[weekday]}) · 빈 칸에 보강·개인레슨을 배정하거나, 새 시간대를 열어서 정규수업을 넣을 수 있습니다</div>
+    <div style="font-size:11px;color:#94a3b8;font-weight:600;">${selected.slice(5).replace('-','월 ')}일(${WD[weekday]}) · 빈 칸에 보강·개인레슨을 배정하거나, 새 시간대를 열어서 정규수업을 넣을 수 있습니다${isOwner()?' · 코트가 비어있으면 "수업 추가"로 동료학습반 같은 특수 반도 만들 수 있습니다':''}</div>
   </div>`;
 
   html += `<div style="padding:0 18px 10px 18px;">
@@ -1365,17 +1392,33 @@ function addClassView(){
       const cap = effectiveCapacity(product, weekday, court.id, repCoachId, t);
       const activeCount = list.filter(s=>s.status!=='cancelled' && s.status!=='absent').length;
       const canFillMore = list.length===0 || (cap!=null && activeCount < cap);
-      html += `<div class="m-card" style="padding:8px;height:100%;box-sizing:border-box;margin-top:0;">
+      const classLabel = list[0] ? list[0].classLabel : null;
+      const groupId = list[0] ? list[0].groupId : null;
+      const linkedPrev = list.length>0 && repCoachId && courtHourActiveCoach(groups, court.id, hourMinusOne(t))===repCoachId;
+      const linkedNext = list.length>0 && repCoachId && courtHourActiveCoach(groups, court.id, hourPlusOne(t))===repCoachId;
+      html += `<div class="m-card" style="padding:8px;height:100%;box-sizing:border-box;margin-top:0;${(linkedPrev||linkedNext)?'border:2px solid #c7d2fe;background:#f5f6ff;':''}">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:4px;border-radius:6px;overflow:hidden;${repCoachId?`background:${coachColor(repCoachId)};`:''}">
-          <div style="min-width:0;overflow:hidden;font-size:11px;font-weight:800;white-space:nowrap;text-overflow:ellipsis;padding:2px 0 2px 7px;${repCoachId?`color:${coachTextColor(repCoachId)};`:'color:#0f172a;'}">${court.name}${repCoachId?' · '+staffById(repCoachId).name:''}</div>
+          <div style="min-width:0;overflow:hidden;font-size:11px;font-weight:800;white-space:nowrap;text-overflow:ellipsis;padding:2px 0 2px 7px;${repCoachId?`color:${coachTextColor(repCoachId)};`:'color:#0f172a;'}">${classLabel?classLabel+' · ':''}${court.name}${repCoachId?' · '+staffById(repCoachId).name:''}</div>
           ${list.length>0 ? `<span class="cap-badge" style="font-size:9px;padding:2px 7px;flex-shrink:0;${repCoachId?`background:transparent;color:${coachTextColor(repCoachId)};`:''}">${list.length}${cap!=null?'/'+cap:''}</span>` : ''}
         </div>`;
+      if (linkedPrev) {
+        html += `<div style="font-size:9px;color:#4338ca;font-weight:800;margin-bottom:4px;">↑ ${hourMinusOne(t)}부터 이어지는 수업</div>`;
+      }
       if (canFillMore) {
         html += `<div style="color:#4f46e5;font-size:10px;font-weight:800;cursor:pointer;margin-top:2px;" onclick="openFillSlotPicker('${selected}','${t}','${court.id}',${repCoachId?`'${repCoachId}'`:'null'})">+ 보강 회원 배정</div>`;
       } else {
         html += `<div style="color:#cbd5e1;font-size:11px;font-weight:600;">정원 마감</div>`;
       }
       html += `<div style="color:#0d9488;font-size:10px;font-weight:800;cursor:pointer;margin-top:4px;" onclick="openBookPersonalSlot(${repCoachId?`'${repCoachId}'`:'null'}, ${weekday}, '${t}', '${selected}')">+ 개인레슨 배정</div>`;
+      if (isOwner() && list.length===0) {
+        html += `<div style="color:#7e22ce;font-size:10px;font-weight:800;cursor:pointer;margin-top:4px;" onclick="openAddAdhocClassForm('${selected}','${t}','${court.id}')">+ 수업 추가</div>`;
+      }
+      if (isOwner() && groupId) {
+        html += `<div style="color:#b91c1c;font-size:10px;font-weight:800;cursor:pointer;margin-top:4px;" onclick="cancelAdhocClass('${groupId}')">이 반 취소</div>`;
+      }
+      if (linkedNext) {
+        html += `<div style="margin-top:6px;padding-top:5px;border-top:1px dashed #c7d2fe;font-size:9px;color:#4338ca;font-weight:800;text-align:center;">↓ ${hourPlusOne(t)}까지 이어짐</div>`;
+      }
       html += `</div>`;
     });
     html += `</div></div>`;
@@ -1402,6 +1445,91 @@ function confirmAddExtraHour(t){
   STATE._addClassExtraHours[selected].add(t);
   closeModal();
   render();
+}
+
+/* ---------- 1c) 관리자 전용 — 코트가 비어있으면 그 자리에서 바로 특수 반(동료학습반 등)을 만든다 ----------
+   정규 상품/코트배정과 무관하게, 하루짜리로 시간(몇 시간이든)·인원(몇 명이든) 자유롭게 정해서 만든다.
+   같은 코치가 여러 시간에 걸쳐 이어지면 courtHourActiveCoach 덕분에 시간표에서 자동으로 테두리로 이어져 보인다. */
+function openAddAdhocClassForm(dateISO, startTime, courtId){
+  if (!isOwner()) return;
+  const coaches = activeCoaches();
+  STATE._adhocClass = { dateISO, courtId, startTime, endTime: hourPlusOne(startTime), coachId: (coaches[0]||{}).id, label:'', memberQuery:'', selectedMembers: [] };
+  renderAddAdhocClassForm();
+}
+function adhocClassField(key, val){ STATE._adhocClass[key] = val; renderAddAdhocClassForm(); }
+function adhocClassSearch(el){
+  STATE._adhocClass.memberQuery = el.value;
+  const box = document.getElementById('adhocMemberResults');
+  if (box) box.innerHTML = adhocMemberResultsHtml();
+}
+function adhocMemberResultsHtml(){
+  const a = STATE._adhocClass;
+  const q = (a.memberQuery||'').trim();
+  const results = q ? STATE.members.filter(m=>m.name.includes(q) && !a.selectedMembers.includes(m.id)).slice(0,20) : [];
+  return (q && results.length===0 ? `<div style="font-size:12px;color:#94a3b8;padding:6px 0;">일치하는 회원이 없습니다.</div>` : '')
+    + results.map(m=>`<div class="m-card" style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;cursor:pointer;" onclick="adhocAddMember('${m.id}')">
+        <span style="font-size:13px;font-weight:700;">${m.name}</span>
+        <span style="font-size:11px;color:#4f46e5;font-weight:700;">+ 추가</span>
+      </div>`).join('');
+}
+function adhocAddMember(memberId){
+  const a = STATE._adhocClass;
+  if (!a.selectedMembers.includes(memberId)) a.selectedMembers.push(memberId);
+  a.memberQuery = '';
+  renderAddAdhocClassForm();
+}
+function adhocRemoveMember(memberId){
+  const a = STATE._adhocClass;
+  a.selectedMembers = a.selectedMembers.filter(id=>id!==memberId);
+  renderAddAdhocClassForm();
+}
+function renderAddAdhocClassForm(){
+  const a = STATE._adhocClass;
+  const coaches = activeCoaches();
+  const endOptions = [...OPERATING_HOURS, hourPlusOne(OPERATING_HOURS[OPERATING_HOURS.length-1])].filter(h=>h>a.startTime);
+  const selectedMembers = a.selectedMembers.map(id=>memberById(id)).filter(Boolean);
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px;">수업 추가</div>
+    <div style="font-size:12px;color:#94a3b8;font-weight:600;margin-bottom:14px;">${a.dateISO} (${WD[fromISO(a.dateISO).getDay()]}) · ${courtById(a.courtId)?courtById(a.courtId).name:''} · 정규 상품과 무관하게 시간·인원을 자유롭게 정하는 특수 반입니다 (예: 동료학습반)</div>
+    <div class="field-label">반 이름 (선택)</div>
+    <input type="text" value="${a.label}" oninput="adhocClassField('label', this.value)" placeholder="예: 동료학습반" />
+    <div class="field-label" style="margin-top:12px;">시작 시간</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;max-height:100px;overflow-y:auto;">${OPERATING_HOURS.map(h=>`<div class="chip-select ${a.startTime===h?'on':''}" onclick="adhocClassField('startTime','${h}')">${h}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">종료 시간</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;max-height:100px;overflow-y:auto;">${endOptions.map(h=>`<div class="chip-select ${a.endTime===h?'on':''}" onclick="adhocClassField('endTime','${h}')">${h}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">담당 코치</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${coaches.map(c=>`<div class="chip-select ${a.coachId===c.id?'on':''}" onclick="adhocClassField('coachId','${c.id}')">${c.name}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">회원 추가 (인원 자유)</div>
+    ${selectedMembers.length>0 ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${selectedMembers.map(m=>`<span class="chip-select on" style="display:flex;align-items:center;gap:6px;cursor:pointer;" onclick="adhocRemoveMember('${m.id}')">${m.name} ✕</span>`).join('')}</div>` : ''}
+    <input type="text" value="${a.memberQuery}" oninput="adhocClassSearch(this)" placeholder="회원 이름 검색해서 추가" />
+    <div id="adhocMemberResults" style="display:flex;flex-direction:column;gap:6px;margin-top:8px;max-height:200px;overflow-y:auto;">${adhocMemberResultsHtml()}</div>
+    <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-top:10px;">현재 ${selectedMembers.length}명 선택됨</div>
+    <div class="btn-primary ${a.endTime<=a.startTime?'disabled':''}" style="margin-top:16px;" onclick="submitAdhocClass()">수업 만들기</div>
+  </div>`;
+  openModal(html);
+}
+async function submitAdhocClass(){
+  const a = STATE._adhocClass;
+  if (a.endTime<=a.startTime) { toast('종료 시간이 시작 시간보다 늦어야 합니다'); return; }
+  if (!a.coachId) { toast('코치를 선택하세요'); return; }
+  if (a.selectedMembers.length===0) { toast('최소 1명 이상 회원을 추가하세요'); return; }
+  const { error } = await sb.rpc('create_adhoc_class', {
+    p_date: a.dateISO, p_start_time: a.startTime, p_end_time: a.endTime, p_coach_id: a.coachId,
+    p_court_id: a.courtId, p_member_ids: a.selectedMembers, p_label: a.label||null
+  });
+  if (error) { toast('생성 실패: '+error.message); return; }
+  await refreshAllDataQuiet();
+  await addLog(null, '', `수업 추가: ${a.label||'특수 반'} · ${a.dateISO} ${a.startTime}~${a.endTime} · ${staffById(a.coachId).name} 코치 · ${courtById(a.courtId).name} · ${a.selectedMembers.length}명`);
+  closeModal(); render();
+  toast(`${a.label||'수업'}이 생성되었습니다`);
+}
+async function cancelAdhocClass(groupId){
+  const { error } = await sb.from('class_sessions').update({ status:'cancelled' }).eq('group_id', groupId);
+  if (error) { toast('취소 실패: '+error.message); return; }
+  STATE.sessions.filter(s=>s.groupId===groupId).forEach(s=>{ s.status = 'cancelled'; });
+  render();
+  toast('수업이 취소되었습니다');
 }
 
 /* ---------- 2) 잔여석 현황판 ---------- */
@@ -1492,7 +1620,8 @@ function availabilityView(){
         if (coachRows.length===0) return;
         html += `<div class="m-card" style="margin-bottom:10px;">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
-            <span style="width:8px;height:8px;border-radius:50%;background:${coachColor(c.id)};flex-shrink:0;"></span>            <span style="font-size:13px;font-weight:800;">${c.name} 코치</span>
+            <span style="width:8px;height:8px;border-radius:50%;background:${coachColor(c.id)};flex-shrink:0;"></span>
+            <span style="font-size:13px;font-weight:800;">${c.name} 코치</span>
           </div>`;
         const timeCourtCount = {};
         coachRows.forEach(r=>{ timeCourtCount[r.time] = (timeCourtCount[r.time]||0)+1; });
@@ -1586,8 +1715,7 @@ function availabilityView(){
           const barColor = r.remaining<=0?'#dc2626':(r.remaining===1?'#d97706':'#16a34a');
           html += `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid #f1f5f9;cursor:pointer;" onclick="openSlotMembersList(${wd}, '${r.time}', '${coachId}', '${r.productId}')">
             <div style="font-size:12px;font-weight:700;width:66px;">${r.time}<br/><span style="font-weight:500;color:#94a3b8;font-size:10px;">${courtById(r.courtId)?courtById(r.courtId).name:''}</span></div>
-            <div class="gauge"><div style="width:${pct}%;background:${barColor};"></div></div>
-            <span style="font-size:11px;font-weight:700;color:#64748b;width:32px;">${r.used}/${product.capacity}</span>
+            <div class="gauge"><div style="width:${pct}%;background:${barColor};"></div></div>            <span style="font-size:11px;font-weight:700;color:#64748b;width:32px;">${r.used}/${product.capacity}</span>
             <span class="avail-pill" style="background:${lab.bg};color:${lab.color};">${lab.text}</span>
           </div>`;
         });
@@ -1791,7 +1919,8 @@ function renderPersonalSlotCoachPicker(){
 }
 function personalSlotDateInput(el){ STATE._personalSlot.date = el.value; }
 function personalSlotSearch(el){
-  STATE._personalSlot.query = el.value;  const box = document.getElementById('personalSlotResults');
+  STATE._personalSlot.query = el.value;
+  const box = document.getElementById('personalSlotResults');
   if (box) box.innerHTML = personalSlotResultsHtml();
 }
 function personalSlotResultsHtml(){
@@ -2090,7 +2219,8 @@ function paymentsListHtml(){
       const coach = staffById(p.defaultCoachId);
       const product = productById(p.productId);
       const initial = m.name[0];
-      html += `<div class="m-card" style="display:flex;align-items:center;gap:12px;">        <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer;" onclick="openMemberSheet('${m.id}')">
+      html += `<div class="m-card" style="display:flex;align-items:center;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer;" onclick="openMemberSheet('${m.id}')">
           <div style="width:38px;height:38px;border-radius:50%;background:#0f766e;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;">${initial}</div>
           <div style="flex:1;min-width:0;">
             <div style="font-size:14px;font-weight:700;">${m.name}</div>
@@ -2389,7 +2519,8 @@ function openAddCoachForm(){
   const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
   <div style="padding:6px 20px 20px 20px;">
     <div style="font-size:16px;font-weight:800;margin-bottom:14px;">코치 계정 추가</div>
-    <div class="field-label">이름</div>    <input type="text" id="new_coach_name" placeholder="예: 홍길동" />
+    <div class="field-label">이름</div>
+    <input type="text" id="new_coach_name" placeholder="예: 홍길동" />
     <div class="field-label" style="margin-top:12px;">생년월일 (초기 비밀번호)</div>
     <input type="text" id="new_coach_password" inputmode="numeric" placeholder="예: 19900101" />
     <div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.6;">이 생년월일이 처음 로그인할 때 쓰는 비밀번호가 됩니다. 코치는 로그인 후 "내수업 &gt; 비밀번호 변경"에서 본인이 직접 바꿀 수 있습니다.</div>
@@ -2483,8 +2614,7 @@ function renderAddTemplateForm(){
 async function submitAddTemplate(){
   const t = STATE._newTemplate;
   const isEdit = !!t.editId;
-  if (!t.coachId) { toast('코치를 선택하세요'); return; }
-  if (t.startTime >= t.endTime) { toast('종료 시간이 시작 시간보다 늦어야 합니다'); return; }
+  if (!t.coachId) { toast('코치를 선택하세요'); return; }  if (t.startTime >= t.endTime) { toast('종료 시간이 시작 시간보다 늦어야 합니다'); return; }
   const hours = templateHours(t);
   const conflictTpl = STATE.classTemplates.find(o=>o.id!==t.editId && o.coachId!==t.coachId && o.weekday===t.weekday && o.courtId===t.courtId && templateHours(o).some(h=>hours.includes(h)));
   if (conflictTpl) {
@@ -2688,7 +2818,8 @@ function renderAddClosedDateForm(){
     <div class="field-label" style="margin-top:12px;">코트</div>
     <select onchange="closedDateField('courtId', this.value)">${STATE.courts.map(ct=>`<option value="${ct.id}" ${ct.id===c.courtId?'selected':''}>${ct.name}</option>`).join('')}</select>` : ''}
     <div class="field-label" style="margin-top:12px;">사유 (선택)</div>
-    <input type="text" value="${c.reason}" oninput="closedDateField('reason', this.value)" placeholder="예: 5주차 휴무, 명절 등" />    <div class="btn-primary" style="margin-top:16px;" onclick="submitAddClosedDate()">등록하기</div>
+    <input type="text" value="${c.reason}" oninput="closedDateField('reason', this.value)" placeholder="예: 5주차 휴무, 명절 등" />
+    <div class="btn-primary" style="margin-top:16px;" onclick="submitAddClosedDate()">등록하기</div>
   </div>`;
   openModal(html);
 }
@@ -2987,7 +3118,8 @@ function openMoveSession(sessionId){
       <div class="btn-primary" onclick="changeOnlyThisSession('${s.id}', document.getElementById('mv_date').value, document.getElementById('mv_time').value, document.getElementById('mv_court').value, document.getElementById('mv_coach').value)">이번 수업만 변경</div>
       ${canEditSlot
         ? `<div class="btn-secondary" onclick="openEditSlotForm('${s.sourceSlotId}')">기본 수업시간 자체 변경</div>`
-        : `<div class="btn-secondary" style="opacity:.5;">이 수업은 기본슬롯에서 생성되지 않아 여기서 기본시간 변경 불가</div>`}    </div>
+        : `<div class="btn-secondary" style="opacity:.5;">이 수업은 기본슬롯에서 생성되지 않아 여기서 기본시간 변경 불가</div>`}
+    </div>
   </div>`;
   openModal(html);
 }
@@ -3286,7 +3418,8 @@ function renderSlotEditor(){
     <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:12px;font-size:11px;color:#92400e;margin-top:14px;line-height:1.6;">
       앞으로 계속 이 요일·시간·코치로 바뀝니다. 이미 생성된 이번 달 수업은 그대로 유지되고, 다음 결제완료 시부터 새 시간으로 생성됩니다.
     </div>
-    <div class="btn-primary" style="margin-top:16px;" onclick="updateSlotDefaults('${se.slotId}', ${se.weekday}, '${se.time}', '${se.coachId}', '${se.courtId}')">기본 수업시간 저장</div>  </div>`;
+    <div class="btn-primary" style="margin-top:16px;" onclick="updateSlotDefaults('${se.slotId}', ${se.weekday}, '${se.time}', '${se.coachId}', '${se.courtId}')">기본 수업시간 저장</div>
+  </div>`;
   openModal(html);
 }
 
