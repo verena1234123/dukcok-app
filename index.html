@@ -297,8 +297,7 @@ async function loadAppData(user){
     availWeekday: today.getDay(),
     staff: [], courts: [], products: [], members: [], slots: [], packages: [],
     enrollments: [], sessions: [], logs: [], classTemplates: [],
-    enrollmentStatusBySlot: {}, packageStatusByMember: {}
-  };
+    enrollmentStatusBySlot: {}, packageStatusByMember: {}  };
   try {
     await refreshAllData();
     render();
@@ -501,6 +500,21 @@ async function confirmPaymentWithMethod(){
   closeModal();
 }
 
+// 아직 이 달 등록(enrollment)이 없는 기존 정규수업 회원 — 결제관리에서 "입금 확인"을 누르면
+// 그 자리에서 이 달 등록을 만들고(직전 금액 그대로 이어받음), 곧바로 같은 입금확인 창을 띄운다.
+// 이후 결제완료 처리는 기존 슬롯의 요일·시간·코치·코트를 그대로 써서 세션을 생성한다.
+async function openConfirmRenewalPayment(slotId, amount){
+  const yearMonth = STATE.paymentMonth;
+  const { data: enrollmentId, error } = await sb.rpc('get_or_create_month_enrollment', { p_slot_id: slotId, p_year_month: yearMonth });
+  if (error) { toast('처리 실패: '+error.message); return; }
+  await refreshEnrollments();
+  openConfirmPaymentPicker(enrollmentId, amount, null, null);
+}
+function lastEnrollmentForSlot(slotId){
+  const list = STATE.enrollments.filter(e=>e.slotId===slotId).sort((a,b)=>b.yearMonth.localeCompare(a.yearMonth));
+  return list[0] || null;
+}
+
 /* ---------- 개인레슨(1:1) 회차권 입금 확인 ---------- */
 function openConfirmPackagePaymentPicker(packageId, amount, defaultMethod, defaultCardCompany){
   STATE._confirmPkgPay = { packageId, amount, method: defaultMethod || '계좌이체', cardCompany: defaultCardCompany || '' };
@@ -582,8 +596,7 @@ async function purchasePackage(memberId, coachId, method){
 }
 
 async function bookPackageSession(memberId, date, time, courtId){
-  const { error } = await sb.rpc('book_package_session', { p_member_id: memberId, p_date: date, p_start_time: time, p_court_id: courtId });
-  if (error) { toast('예약 실패: '+error.message); return; }
+  const { error } = await sb.rpc('book_package_session', { p_member_id: memberId, p_date: date, p_start_time: time, p_court_id: courtId });  if (error) { toast('예약 실패: '+error.message); return; }
   await refreshMemberSessions(memberId);
   await refreshMyPackageStatus();
   const m = memberById(memberId);
@@ -881,9 +894,7 @@ function availLabel(remaining){
   if (remaining <= 0) return {text:'마감', bg:'#fef2f2', color:'#b91c1c'};
   if (remaining === 1) return {text:'마감임박', bg:'#fffbeb', color:'#b45309'};
   return {text:'여유', bg:'#f0fdf4', color:'#15803d'};
-}
-
-/* ============================== 렌더링 ============================== */
+}/* ============================== 렌더링 ============================== */
 function render(){
   const root = document.getElementById('appRoot');
   const stickyExtra = STATE.tab==='timetable' ? timetableHeaderHtml() : (STATE.tab==='myinfo' ? myInfoHeaderHtml() : (STATE.tab==='members' ? membersHeaderHtml() : ''));
@@ -1182,8 +1193,7 @@ function timetableView(){
           html += `<div style="padding:5px 0;border-top:1px solid #f1f5f9;cursor:pointer;display:flex;align-items:center;gap:4px;" onclick="openSessionSheet('${s.id}')">
             <div style="flex:1;min-width:0;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m?m.name:'(삭제된 회원)'}${s.originType==='package_session'?' <span style=\"color:#0d9488;font-weight:600;\">개인</span>':''}</div>
             <span style="display:flex;align-items:center;gap:3px;flex-shrink:0;">
-              ${s.capacityOverride?'<span class="status-badge" style="color:#b45309;background:#fef3c7;border-color:#fde68a;font-size:9px;padding:2px 5px;">강제</span>':''}
-              <span class="status-badge st-${s.status}" style="font-size:9px;padding:2px 5px;">${statusIcon(s.status)}${STATUS_LABEL[s.status]}</span>
+              ${s.capacityOverride?'<span class="status-badge" style="color:#b45309;background:#fef3c7;border-color:#fde68a;font-size:9px;padding:2px 5px;">강제</span>':''}              <span class="status-badge st-${s.status}" style="font-size:9px;padding:2px 5px;">${statusIcon(s.status)}${STATUS_LABEL[s.status]}</span>
             </span>
           </div>`;
         });
@@ -1482,8 +1492,7 @@ function availabilityView(){
         if (coachRows.length===0) return;
         html += `<div class="m-card" style="margin-bottom:10px;">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
-            <span style="width:8px;height:8px;border-radius:50%;background:${coachColor(c.id)};flex-shrink:0;"></span>
-            <span style="font-size:13px;font-weight:800;">${c.name} 코치</span>
+            <span style="width:8px;height:8px;border-radius:50%;background:${coachColor(c.id)};flex-shrink:0;"></span>            <span style="font-size:13px;font-weight:800;">${c.name} 코치</span>
           </div>`;
         const timeCourtCount = {};
         coachRows.forEach(r=>{ timeCourtCount[r.time] = (timeCourtCount[r.time]||0)+1; });
@@ -1603,22 +1612,44 @@ function availabilityView(){
   return html;
 }
 // 잔여석 탭에서 자리수(N자리) 배지를 눌렀을 때 그 요일·시간·코치·상품에 실제로 등록된 회원을 보여준다.
-// time이 null이면 그 요일의 이 코치(또는 전체)·상품 전체 시간대를 모아서 보여준다(상단 요약 배지용).
+// time이 null이면 그 요일의 이 코치(또는 전체)·상품 전체 시간대를 모아서 보여준다(상단 요약 배지용) —
+// 이 경우 같은 시간(=같은 반)끼리 묶어서 보여줘야 "누구랑 같이 듣는지"가 한눈에 보인다.
 function openSlotMembersList(weekday, time, coachId, productId){
   const slots = STATE.slots.filter(sl=>sl.active && sl.weekday===weekday && sl.productId===productId && (coachId===null || sl.coachId===coachId) && (time===null || sl.time===time));
   const rows = slots.map(sl=>({member: memberById(sl.memberId), slot: sl})).filter(r=>r.member).sort((a,b)=>a.slot.time.localeCompare(b.slot.time));
   const product = productById(productId);
   const coach = coachId ? staffById(coachId) : null;
+
+  const memberRow = r => `<div class="m-card" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="closeModal();openMemberSheet('${r.member.id}')">
+    <span style="font-size:13px;font-weight:700;">${r.member.name}</span>
+    <span style="font-size:11px;color:#94a3b8;font-weight:600;">${staffById(r.slot.coachId)?staffById(r.slot.coachId).name+' · ':''}${courtById(r.slot.courtId)?courtById(r.slot.courtId).name:''}</span>
+  </div>`;
+
+  let body;
+  if (rows.length===0) {
+    body = `<div style="font-size:13px;color:#94a3b8;">등록된 회원이 없습니다.</div>`;
+  } else if (time) {
+    body = `<div style="display:flex;flex-direction:column;gap:6px;">${rows.map(memberRow).join('')}</div>`;
+  } else {
+    const byTime = {};
+    rows.forEach(r=>{ (byTime[r.slot.time] = byTime[r.slot.time]||[]).push(r); });
+    body = Object.keys(byTime).sort().map(t=>{
+      const group = byTime[t];
+      return `<div style="margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <span style="font-size:13px;font-weight:800;">${t}</span>
+          <span style="font-size:11px;color:#94a3b8;font-weight:700;">${group.length}명 · 같은 반</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">${group.map(memberRow).join('')}</div>
+      </div>`;
+    }).join('');
+  }
+
   const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
   <div style="padding:6px 20px 20px 20px;">
     <div style="font-size:16px;font-weight:800;margin-bottom:4px;">${WD[weekday]}요일 ${time?time+' · ':''}${coach?coach.name+' · ':''}${product?product.name.split(' ')[0]:''}</div>
     <div style="font-size:12px;color:#94a3b8;font-weight:600;margin-bottom:14px;">현재 수강 중인 회원 ${rows.length}명</div>
-    <div style="display:flex;flex-direction:column;gap:6px;">
-      ${rows.length===0 ? `<div style="font-size:13px;color:#94a3b8;">등록된 회원이 없습니다.</div>` : rows.map(r=>`<div class="m-card" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="closeModal();openMemberSheet('${r.member.id}')">
-        <span style="font-size:13px;font-weight:700;">${r.member.name}${time?'':' · '+r.slot.time}</span>
-        <span style="font-size:11px;color:#94a3b8;font-weight:600;">${staffById(r.slot.coachId)?staffById(r.slot.coachId).name+' · ':''}${courtById(r.slot.courtId)?courtById(r.slot.courtId).name:''}</span>
-      </div>`).join('')}
-    </div>
+    ${body}
   </div>`;
   openModal(html);
 }
@@ -1760,8 +1791,7 @@ function renderPersonalSlotCoachPicker(){
 }
 function personalSlotDateInput(el){ STATE._personalSlot.date = el.value; }
 function personalSlotSearch(el){
-  STATE._personalSlot.query = el.value;
-  const box = document.getElementById('personalSlotResults');
+  STATE._personalSlot.query = el.value;  const box = document.getElementById('personalSlotResults');
   if (box) box.innerHTML = personalSlotResultsHtml();
 }
 function personalSlotResultsHtml(){
@@ -1975,8 +2005,10 @@ function paymentsView(){
   if (!isOwner()) return `<div style="padding:40px 18px;text-align:center;color:#94a3b8;font-size:13px;">관리자만 접근할 수 있는 화면입니다.</div>`;
   const yearMonth = STATE.paymentMonth;
   const rows = STATE.enrollments.filter(e=>e.yearMonth===yearMonth);
+  const pendingSlotCount = STATE.slots.filter(sl=>sl.active && !rows.some(e=>e.slotId===sl.id) && memberById(sl.memberId)).length;
   const paidCount = rows.filter(r=>r.paymentStatus==='paid').length;
-  const pct = rows.length ? Math.round(paidCount/rows.length*100) : 0;
+  const totalCount = rows.length + pendingSlotCount;
+  const pct = totalCount ? Math.round(paidCount/totalCount*100) : 0;
   let html = `<div style="padding:14px 18px;">
     <div style="font-size:16px;font-weight:800;">월별 결제관리</div>
     <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:10px;">
@@ -1986,7 +2018,7 @@ function paymentsView(){
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;">
       <span style="font-size:12px;color:#94a3b8;font-weight:600;">등록 진행률</span>
-      <span style="font-size:12px;font-weight:700;color:#4f46e5;">${paidCount}/${rows.length} · ${pct}%</span>
+      <span style="font-size:12px;font-weight:700;color:#4f46e5;">${paidCount}/${totalCount} · ${pct}%</span>
     </div>
     <div style="height:6px;background:#f1f5f9;border-radius:999px;margin-top:8px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:#4f46e5;"></div></div>
     <input type="text" value="${STATE.paymentSearch||''}" oninput="paymentsSearchInput(this)" placeholder="회원 이름으로 검색" style="margin-top:12px;" />
@@ -2024,6 +2056,31 @@ function paymentsListHtml(){
     </div>`;
   });
 
+  // 이미 몇 달째 다니는 정규수업 회원인데 아직 이 달 등록(enrollment)이 없는 경우 —
+  // 예전에는 결제관리 목록에서 아예 사라졌다. 활성 슬롯 기준으로 찾아서 "결제 전" 상태로 보여주고,
+  // 입금 확인을 누르면 그 자리에서 이 달 등록을 만들며 기존 요일·시간·코치·코트 그대로 이어간다.
+  const pendingSlots = STATE.slots.filter(sl=>sl.active && !STATE.enrollments.some(e=>e.slotId===sl.id && e.yearMonth===yearMonth)
+    && memberById(sl.memberId) && (!q || memberById(sl.memberId).name.includes(q)));
+  pendingSlots.forEach(sl=>{
+    const m = memberById(sl.memberId);
+    const product = productById(sl.productId);
+    const prior = lastEnrollmentForSlot(sl.id);
+    const amount = prior ? prior.paymentAmount : (product?product.price:0);
+    const discount = prior ? (prior.discount||0) : 0;
+    const initial = m.name[0];
+    html += `<div class="m-card" style="display:flex;align-items:center;gap:12px;">
+      <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer;" onclick="openMemberSheet('${m.id}')">
+        <div style="width:38px;height:38px;border-radius:50%;background:#4f46e5;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;">${initial}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:700;">${m.name}</div>
+          <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-top:2px;">${staffById(sl.coachId)?staffById(sl.coachId).name:'-'} · ${WD[sl.weekday]} ${sl.time} · ${amount.toLocaleString()}원${discount?` <span style="color:#dc2626;">-${discount.toLocaleString()}원</span>`:''}</div>
+          <div style="font-size:11px;color:#c2410c;font-weight:600;margin-top:2px;">${monthLabel(yearMonth)} 아직 등록 전</div>
+        </div>
+      </div>
+      <div style="padding:8px 12px;border-radius:9px;background:#f1f5f9;border:1px solid #e2e8f0;color:#334155;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;" onclick="openConfirmRenewalPayment('${sl.id}', ${amount})">입금 확인</div>
+    </div>`;
+  });
+
   const pkgRows = (STATE.packages||[]).filter(p=>p.status==='active' && (!q || (memberById(p.memberId) && memberById(p.memberId).name.includes(q))));
   if (pkgRows.length>0) {
     html += `<div style="font-size:12px;font-weight:700;color:#94a3b8;margin:16px 0 8px 0;">개인레슨(1:1) 회차권</div>`;
@@ -2033,8 +2090,7 @@ function paymentsListHtml(){
       const coach = staffById(p.defaultCoachId);
       const product = productById(p.productId);
       const initial = m.name[0];
-      html += `<div class="m-card" style="display:flex;align-items:center;gap:12px;">
-        <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer;" onclick="openMemberSheet('${m.id}')">
+      html += `<div class="m-card" style="display:flex;align-items:center;gap:12px;">        <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer;" onclick="openMemberSheet('${m.id}')">
           <div style="width:38px;height:38px;border-radius:50%;background:#0f766e;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;">${initial}</div>
           <div style="flex:1;min-width:0;">
             <div style="font-size:14px;font-weight:700;">${m.name}</div>
@@ -2049,7 +2105,7 @@ function paymentsListHtml(){
       </div>`;
     });
   }
-  if (q && rows.length===0 && pkgRows.length===0) html += `<div style="text-align:center;padding:30px 0;color:#94a3b8;font-size:13px;">"${q}" 이름의 등록 내역이 없습니다.</div>`;
+  if (q && rows.length===0 && pendingSlots.length===0 && pkgRows.length===0) html += `<div style="text-align:center;padding:30px 0;color:#94a3b8;font-size:13px;">"${q}" 이름의 등록 내역이 없습니다.</div>`;
   return html;
 }
 function shiftPaymentMonth(n){ STATE.paymentMonth = addMonths(STATE.paymentMonth, n); render(); }
@@ -2333,8 +2389,7 @@ function openAddCoachForm(){
   const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
   <div style="padding:6px 20px 20px 20px;">
     <div style="font-size:16px;font-weight:800;margin-bottom:14px;">코치 계정 추가</div>
-    <div class="field-label">이름</div>
-    <input type="text" id="new_coach_name" placeholder="예: 홍길동" />
+    <div class="field-label">이름</div>    <input type="text" id="new_coach_name" placeholder="예: 홍길동" />
     <div class="field-label" style="margin-top:12px;">생년월일 (초기 비밀번호)</div>
     <input type="text" id="new_coach_password" inputmode="numeric" placeholder="예: 19900101" />
     <div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.6;">이 생년월일이 처음 로그인할 때 쓰는 비밀번호가 됩니다. 코치는 로그인 후 "내수업 &gt; 비밀번호 변경"에서 본인이 직접 바꿀 수 있습니다.</div>
@@ -2633,8 +2688,7 @@ function renderAddClosedDateForm(){
     <div class="field-label" style="margin-top:12px;">코트</div>
     <select onchange="closedDateField('courtId', this.value)">${STATE.courts.map(ct=>`<option value="${ct.id}" ${ct.id===c.courtId?'selected':''}>${ct.name}</option>`).join('')}</select>` : ''}
     <div class="field-label" style="margin-top:12px;">사유 (선택)</div>
-    <input type="text" value="${c.reason}" oninput="closedDateField('reason', this.value)" placeholder="예: 5주차 휴무, 명절 등" />
-    <div class="btn-primary" style="margin-top:16px;" onclick="submitAddClosedDate()">등록하기</div>
+    <input type="text" value="${c.reason}" oninput="closedDateField('reason', this.value)" placeholder="예: 5주차 휴무, 명절 등" />    <div class="btn-primary" style="margin-top:16px;" onclick="submitAddClosedDate()">등록하기</div>
   </div>`;
   openModal(html);
 }
@@ -2797,7 +2851,8 @@ function reportsView(){
   trend.forEach(t=>{
     const pct = Math.round((t.amt/maxTrend)*100);
     html += `<div style="display:flex;align-items:center;gap:10px;padding:5px 0;">
-      <div style="font-size:11px;font-weight:700;width:52px;color:#64748b;">${t.mth.slice(5)}월</div>      <div class="gauge"><div style="width:${pct}%;background:#4f46e5;"></div></div>
+      <div style="font-size:11px;font-weight:700;width:52px;color:#64748b;">${t.mth.slice(5)}월</div>
+      <div class="gauge"><div style="width:${pct}%;background:#4f46e5;"></div></div>
       <div style="font-size:11px;font-weight:700;width:76px;text-align:right;">${t.amt.toLocaleString()}원</div>
     </div>`;
   });
@@ -2932,8 +2987,7 @@ function openMoveSession(sessionId){
       <div class="btn-primary" onclick="changeOnlyThisSession('${s.id}', document.getElementById('mv_date').value, document.getElementById('mv_time').value, document.getElementById('mv_court').value, document.getElementById('mv_coach').value)">이번 수업만 변경</div>
       ${canEditSlot
         ? `<div class="btn-secondary" onclick="openEditSlotForm('${s.sourceSlotId}')">기본 수업시간 자체 변경</div>`
-        : `<div class="btn-secondary" style="opacity:.5;">이 수업은 기본슬롯에서 생성되지 않아 여기서 기본시간 변경 불가</div>`}
-    </div>
+        : `<div class="btn-secondary" style="opacity:.5;">이 수업은 기본슬롯에서 생성되지 않아 여기서 기본시간 변경 불가</div>`}    </div>
   </div>`;
   openModal(html);
 }
@@ -3096,7 +3150,8 @@ function openMemberSheet(memberId){
   const m = memberById(memberId); const slots = slotsOfMember(memberId); const hasPkg = memberHasPackage(memberId);
   // "이번달"을 실제 오늘 날짜로 고정하면, 시간표에서 다른 달(예: 다음달) 날짜를 보다가 회원을 눌렀을 때도
   // 항상 진짜 오늘 기준 등록상태만 보여서 헷갈렸다 — 지금 시간표에서 보고 있는 날짜의 달을 기준으로 삼는다.
-  const thisMonth = ym(fromISO(STATE.selectedDate || STATE.today));  const all = STATE.sessions.filter(s=>s.memberId===memberId && s.date.slice(0,7)===thisMonth);
+  const thisMonth = ym(fromISO(STATE.selectedDate || STATE.today));
+  const all = STATE.sessions.filter(s=>s.memberId===memberId && s.date.slice(0,7)===thisMonth);
   const attended = all.filter(s=>s.status==='attended').length;
   const absent = all.filter(s=>s.status==='absent').length;
   const scheduled = all.filter(s=>s.status==='scheduled').length;
@@ -3231,8 +3286,7 @@ function renderSlotEditor(){
     <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:12px;font-size:11px;color:#92400e;margin-top:14px;line-height:1.6;">
       앞으로 계속 이 요일·시간·코치로 바뀝니다. 이미 생성된 이번 달 수업은 그대로 유지되고, 다음 결제완료 시부터 새 시간으로 생성됩니다.
     </div>
-    <div class="btn-primary" style="margin-top:16px;" onclick="updateSlotDefaults('${se.slotId}', ${se.weekday}, '${se.time}', '${se.coachId}', '${se.courtId}')">기본 수업시간 저장</div>
-  </div>`;
+    <div class="btn-primary" style="margin-top:16px;" onclick="updateSlotDefaults('${se.slotId}', ${se.weekday}, '${se.time}', '${se.coachId}', '${se.courtId}')">기본 수업시간 저장</div>  </div>`;
   openModal(html);
 }
 
