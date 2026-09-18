@@ -2285,74 +2285,81 @@ function memberRegistrationStatusView(){
 // 코치 한 명을 골랐을 때 — 빈 칸 없이, 그 코치가 실제로 배정된 (요일,시간) 수업만 카드로 나열한다.
 // 요일×시간 격자를 다 채우면 코치가 안 가르치는 칸이 대부분이라 빈칸투성이가 되므로, 실제 있는 것만 보여준다.
 function regStatusCoachListHtml(coachId, yearMonth){
-  const items = [];
+  const byWd = {};
+  REGSTATUS_WEEKDAYS.forEach(wd=>{ byWd[wd] = []; });
   REGSTATUS_WEEKDAYS.forEach(wd=>{
     OPERATING_HOURS.forEach(h=>{
       const cell = regStatusCoachCell(coachId, wd, h);
-      if (cell) items.push({ wd, h, cell });
+      if (cell) byWd[wd].push({ h, cell });
     });
   });
-  if (items.length===0) return `<div style="text-align:center;padding:40px 0;color:#94a3b8;font-size:13px;">배정된 정규수업이 없습니다.</div>`;
-  const cards = items.map(({wd, h, cell})=>{
-    const { tpl, product, cap, members, court } = cell;
-    const openSlots = cap!=null ? Math.max(0, cap-members.length) : 0;
-    return `<div class="m-card" style="padding:10px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:4px;">
-        <div style="min-width:0;">
-          <div style="font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${WD[wd]} ${h}</div>
-          <div style="font-size:10px;color:#94a3b8;font-weight:600;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${court?court.name:''}${product?' · '+product.name:''}</div>
+  const sections = REGSTATUS_WEEKDAYS.filter(wd=>byWd[wd].length>0);
+  if (sections.length===0) return `<div style="text-align:center;padding:40px 0;color:#94a3b8;font-size:13px;">배정된 정규수업이 없습니다.</div>`;
+  return sections.map(wd=>{
+    const cards = byWd[wd].map(({h, cell})=>{
+      const { tpl, product, cap, members, court } = cell;
+      const openSlots = cap!=null ? Math.max(0, cap-members.length) : 0;
+      return `<div class="m-card" style="padding:10px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:4px;">
+          <div style="min-width:0;">
+            <div style="font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${h}</div>
+            <div style="font-size:10px;color:#94a3b8;font-weight:600;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${court?court.name:''}${product?' · '+product.name:''}</div>
+          </div>
+          <span class="cap-badge" style="font-size:9px;padding:2px 7px;flex-shrink:0;">${members.length}${cap!=null?'/'+cap:''}</span>
         </div>
-        <span class="cap-badge" style="font-size:9px;padding:2px 7px;flex-shrink:0;">${members.length}${cap!=null?'/'+cap:''}</span>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:2px;">
-        ${members.map(x=>{
-          const enr = STATE.enrollments.find(e=>e.slotId===x.slotId && e.yearMonth===yearMonth);
-          const paid = enr ? enr.paymentStatus==='paid' : null;
-          const dot = paid===true ? '#22c55e' : (paid===false ? '#ef4444' : '#cbd5e1');
-          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-top:1px solid #f1f5f9;gap:4px;">
-            <span style="display:flex;align-items:center;gap:5px;min-width:0;cursor:pointer;" onclick="openMemberSheet('${x.member.id}')">
-              <span style="width:6px;height:6px;border-radius:50%;background:${dot};flex-shrink:0;"></span>
-              <span style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${x.member.name}</span>
-            </span>
-            <span style="font-size:10px;color:#b91c1c;font-weight:700;cursor:pointer;flex-shrink:0;" onclick="confirmCancelMemberSlot('${x.slotId}')">삭제</span>
-          </div>`;
-        }).join('')}
-      </div>
-      ${openSlots>0 ? `<div style="color:#4f46e5;font-size:10px;font-weight:800;cursor:pointer;margin-top:6px;" onclick="openAssignMemberToClass('${tpl.id}',${wd},'${h}','${tpl.courtId}')">+ 회원 추가</div>` : ''}
+        <div style="display:flex;flex-direction:column;gap:2px;">
+          ${members.map(x=>{
+            const enr = STATE.enrollments.find(e=>e.slotId===x.slotId && e.yearMonth===yearMonth);
+            const paid = enr ? enr.paymentStatus==='paid' : null;
+            const dot = paid===true ? '#22c55e' : (paid===false ? '#ef4444' : '#cbd5e1');
+            return `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-top:1px solid #f1f5f9;gap:4px;">
+              <span style="display:flex;align-items:center;gap:5px;min-width:0;cursor:pointer;" onclick="openMemberSheet('${x.member.id}')">
+                <span style="width:6px;height:6px;border-radius:50%;background:${dot};flex-shrink:0;"></span>
+                <span style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${x.member.name}</span>
+              </span>
+              <span style="font-size:10px;color:#b91c1c;font-weight:700;cursor:pointer;flex-shrink:0;" onclick="confirmCancelMemberSlot('${x.slotId}')">삭제</span>
+            </div>`;
+          }).join('')}
+        </div>
+        ${openSlots>0 ? `<div style="color:#4f46e5;font-size:10px;font-weight:800;cursor:pointer;margin-top:6px;" onclick="openAssignMemberToClass('${tpl.id}',${wd},'${h}','${tpl.courtId}')">+ 회원 추가</div>` : ''}
+      </div>`;
+    }).join('');
+    return `<div style="margin-bottom:16px;">
+      <div style="font-size:13px;font-weight:800;color:#0f172a;margin-bottom:8px;">${WD[wd]}요일</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">${cards}</div>
     </div>`;
   }).join('');
-  return `<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">${cards}</div>`;
 }
 // "전체"를 골랐을 때 — 요일×코트를 가로로 이어붙인 격자. 칸이 좁아 코치 이니셜+인원만 보여주고,
 // 눌러야 그 칸의 회원 명단(추가/취소)이 나오는 상세 시트를 연다.
-// "전체"를 골랐을 때 — 코치별로 세로 구간을 나누고, 그 안에서 조밀한(3열) 카드 그리드로 보여준다.
-// 코치 이름을 구간 제목으로 한 번만 보여주므로 카드 자체는 요일/시간/코트/인원만 담아 작게 만들 수 있다.
+// "전체"를 골랐을 때 — 요일별로 구간을 나누고("월요반","화요반" ...), 그 안에서 조밀한(3열) 카드 그리드로
+// 보여준다. 월~일 전체 요일을 한 화면에 다 보여주므로, 코치가 여러 명이어도 무슨 요일에 뭐가 있는지 한눈에 보인다.
 function regStatusAllGridHtml(yearMonth){
   const courts = STATE.courts;
-  const coaches = activeCoaches();
-  const byCoach = {};
-  coaches.forEach(c=>{ byCoach[c.id] = []; });
+  const byWd = {};
+  REGSTATUS_WEEKDAYS.forEach(wd=>{ byWd[wd] = []; });
   REGSTATUS_WEEKDAYS.forEach(wd=>{
     OPERATING_HOURS.forEach(h=>{
       courts.forEach(court=>{
         const cell = regStatusCell(wd, h, court.id);
-        if (cell && byCoach[cell.tpl.coachId]) byCoach[cell.tpl.coachId].push({ wd, h, court, cell });
+        if (cell) byWd[wd].push({ h, court, cell });
       });
     });
   });
-  const sections = coaches.filter(c=>byCoach[c.id].length>0);
+  const sections = REGSTATUS_WEEKDAYS.filter(wd=>byWd[wd].length>0);
   if (sections.length===0) return `<div style="text-align:center;padding:40px 0;color:#94a3b8;font-size:13px;">배정된 정규수업이 없습니다.</div>`;
-  return sections.map(c=>{
-    const txt = coachTextColor(c.id);
-    const cards = byCoach[c.id].map(({wd, h, court, cell})=>{
-      return `<div style="border-radius:10px;padding:7px;cursor:pointer;background:${coachColor(c.id)};" onclick="openRegStatusCellDetail(${wd},'${h}','${court.id}')">
-        <div style="font-size:10px;font-weight:800;color:${txt};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${WD[wd]} ${h}</div>
+  return sections.map(wd=>{
+    const cards = byWd[wd].map(({h, court, cell})=>{
+      const coach = staffById(cell.tpl.coachId);
+      const txt = coachTextColor(cell.tpl.coachId);
+      return `<div style="border-radius:10px;padding:7px;cursor:pointer;background:${coachColor(cell.tpl.coachId)};" onclick="openRegStatusCellDetail(${wd},'${h}','${court.id}')">
+        <div style="font-size:10px;font-weight:800;color:${txt};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${h} · ${coach?coach.name:'-'}</div>
         <div style="font-size:9px;font-weight:700;color:${txt};opacity:0.75;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${court.name}</div>
         <div style="font-size:10px;font-weight:700;color:${txt};margin-top:3px;">${cell.members.length}${cell.cap!=null?'/'+cell.cap:''}</div>
       </div>`;
     }).join('');
     return `<div style="margin-bottom:16px;">
-      <div style="font-size:13px;font-weight:800;color:#0f172a;margin-bottom:8px;">${c.name} 코치</div>
+      <div style="font-size:13px;font-weight:800;color:#0f172a;margin-bottom:8px;">${WD[wd]}요반</div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">${cards}</div>
     </div>`;
   }).join('');
