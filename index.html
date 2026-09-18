@@ -399,6 +399,25 @@ function toast(msg){
 
 /* ============================== 조회 헬퍼 ============================== */
 function memberById(id){ return STATE.members.find(m=>m.id===id); }
+// 전화번호의 '-' 유무와 무관하게 숫자만 비교해서 같은 번호인지 판단한다 (010-1234-5678 = 01012345678)
+function normalizePhone(phone){ return (phone||'').replace(/[^0-9]/g,''); }
+function findDuplicateMember(name, phone){
+  const np = normalizePhone(phone);
+  if (!np || !name) return null;
+  return STATE.members.find(m=>m.name===name && normalizePhone(m.phone)===np);
+}
+function openDuplicateMemberConfirm(dup, proceedFnName, cancelFnName){
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:8px;">중복 회원일 수 있습니다</div>
+    <div style="font-size:12px;color:#64748b;font-weight:600;line-height:1.6;margin-bottom:18px;">이름과 전화번호가 같은 회원이 이미 있습니다 (${dup.name} · ${dup.phone||'-'}). 그래도 새로 등록하시겠습니까?</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="btn-primary" onclick="${proceedFnName}()">그래도 등록</div>
+      <div class="btn-secondary" onclick="${cancelFnName}()">취소</div>
+    </div>
+  </div>`;
+  openModal(html);
+}
 function staffById(id){ return STATE.staff.find(s=>s.id===id); }
 // 코치 선택 목록(코트배정/일괄등록/신규등록 등) — 이동선처럼 관리자를 겸임하는 코치도 포함하되(role이 owner여도
 // 실제로 수업을 맡는 코치이므로), 로그인 목록에서 숨긴 순수 관리자 계정("관리자")과 삭제(비활성화)된 코치는 제외한다.
@@ -1238,7 +1257,7 @@ function courtHourLinkKey(groups, courtId, t){
           </div>`;
         });
       }
-      html += `<div style="display:flex;justify-content:flex-start;margin-top:auto;padding-top:6px;">
+      html += `<div style="display:flex;justify-content:flex-end;margin-top:auto;padding-top:6px;">
         <div style="width:22px;height:22px;border-radius:50%;background:#eef0ff;color:#4f46e5;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;cursor:pointer;line-height:1;" onclick="openCellActionMenu('${selected}',${weekday},'${t}','${court.id}')">+</div>
       </div>`;
       if (linkedNext) {
@@ -1299,6 +1318,7 @@ function shiftMonthPicker(n){
 function pickMonthDate(iso){
   STATE.selectedDate = iso;
   STATE.weekStart = toISO(addDays(fromISO(iso), -fromISO(iso).getDay()));
+  STATE.templateManagerWeekday = fromISO(iso).getDay();
   closeModal(); render();
 }
 function renderMonthPicker(){
@@ -2134,6 +2154,12 @@ function renderNewMemberForPersonalSlot(){
 async function submitNewMemberForPersonalSlot(){
   const nm = STATE._personalSlot._newMember;
   if (!nm.name.trim()) { toast('이름을 입력하세요'); return; }
+  const dup = findDuplicateMember(nm.name.trim(), nm.phone);
+  if (dup) { openDuplicateMemberConfirm(dup, 'proceedNewMemberForPersonalSlot', 'renderNewMemberForPersonalSlot'); return; }
+  await proceedNewMemberForPersonalSlot();
+}
+async function proceedNewMemberForPersonalSlot(){
+  const nm = STATE._personalSlot._newMember;
   const { data, error } = await sb.from('members').insert({ name: nm.name.trim(), phone: (nm.phone||'').trim(), status:'active', memo:'' }).select().single();
   if (error) { toast('등록 실패: '+error.message); return; }
   STATE.members.push(rowToCamel(data));
@@ -2707,58 +2733,11 @@ function openAddCourtForm(){
   openModal(html);
 }
 function setTemplateManagerWeekday(w){ STATE.templateManagerWeekday = w; render(); }
-function jumpToTimetableDate(dateISO){
-  if (!dateISO) return;
-  STATE.selectedDate = dateISO;
-  STATE.weekStart = toISO(addDays(fromISO(dateISO), -fromISO(dateISO).getDay()));
-  STATE.tab = 'timetable';
-  STATE.timetableMode = 'view';
-  closeModal();
+// 수업관리 날짜/요일 칩(시간표 탭과 동일한 day-chip UI) — 클릭하면 그 날짜를 선택하고 해당 요일로 필터한다.
+function pickTemplateManagerDay(iso, weekday){
+  STATE.selectedDate = iso;
+  STATE.templateManagerWeekday = weekday;
   render();
-}
-// 수업관리의 달력 버튼 — 전체 월간 달력을 보여주고, 날짜를 고르면 그 날짜가 속한 주의 시간표로 이동한다.
-function openTemplateManagerCalendar(){
-  const base = fromISO(STATE.selectedDate || STATE.today);
-  STATE._tplCalendar = { year: base.getFullYear(), month: base.getMonth() };
-  renderTemplateManagerCalendar();
-}
-function shiftTemplateManagerCalendar(n){
-  const mp = STATE._tplCalendar;
-  let m = mp.month+n, y = mp.year;
-  while (m>11){ m-=12; y++; }
-  while (m<0){ m+=12; y--; }
-  mp.month = m; mp.year = y;
-  renderTemplateManagerCalendar();
-}
-function renderTemplateManagerCalendar(){
-  const mp = STATE._tplCalendar;
-  const first = new Date(mp.year, mp.month, 1);
-  const startOffset = first.getDay();
-  const daysInMonth = new Date(mp.year, mp.month+1, 0).getDate();
-  const selected = STATE.selectedDate || STATE.today;
-  let cells = '';
-  for (let i=0;i<startOffset;i++) cells += `<div></div>`;
-  for (let d=1; d<=daysInMonth; d++) {
-    const iso = toISO(new Date(mp.year, mp.month, d));
-    const sel = iso===selected;
-    const isToday = iso===STATE.today;
-    cells += `<div onclick="jumpToTimetableDate('${iso}')" style="height:42px;display:flex;align-items:center;justify-content:center;border-radius:10px;cursor:pointer;${sel?'background:#4f46e5;':(isToday?'background:#eef0ff;':'')}">
-      <span style="font-size:13px;font-weight:${sel?'800':'600'};color:${sel?'#fff':'#0f172a'};">${d}</span>
-    </div>`;
-  }
-  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
-  <div style="padding:6px 20px 20px 20px;">
-    <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:16px;">
-      <span onclick="shiftTemplateManagerCalendar(-1)" style="cursor:pointer;">${ICONS.chevL}</span>
-      <span style="font-size:16px;font-weight:800;">${mp.year}년 ${mp.month+1}월</span>
-      <span onclick="shiftTemplateManagerCalendar(1)" style="cursor:pointer;">${ICONS.chevR}</span>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px;">
-      ${WD.map((w,i)=>`<div style="text-align:center;font-size:11px;font-weight:700;color:${i===0?'#dc2626':(i===6?'#2563eb':'#94a3b8')};">${w}</div>`).join('')}
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">${cells}</div>
-  </div>`;
-  openModal(html);
 }
 function openAddTemplateManagerHour(){
   const weekday = STATE.templateManagerWeekday!=null ? STATE.templateManagerWeekday : 1;
@@ -2782,16 +2761,28 @@ function classTemplateManagerView(){
   const weekday = STATE.templateManagerWeekday!=null ? STATE.templateManagerWeekday : 1;
   const weekStart = fromISO(STATE.weekStart);
   const weekDays = [...Array(7)].map((_,i)=>addDays(weekStart,i));
+  const selected = STATE.selectedDate || STATE.today;
+  const monthTitle = weekStart.getFullYear()+'년 '+(weekStart.getMonth()+1)+'월';
   let html = `<div style="padding:4px 18px 18px 18px;">
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#1d4ed8;font-weight:600;line-height:1.6;">
       요일·시간·코트별로 어느 코치가 어떤 상품(1:4/1:2) 수업을 하는지 여기서 배정합니다. 빈 칸을 누르면 새로 배정하고, 배정된 칸을 누르면 수정·삭제할 수 있습니다. 동료학습반처럼 상품 정원과 다른 인원을 받는 반은 "커스텀 정원"에 원하는 인원을 직접 적으면 됩니다.
     </div>
-    <div style="font-size:11px;color:#94a3b8;font-weight:700;margin-bottom:6px;">${weekStart.getFullYear()}년 ${weekStart.getMonth()+1}월</div>
-    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
-      ${WD.map((d,i)=>{ const wd = weekDays.find(x=>x.getDay()===i); return `<div class="chip-select ${weekday===i?'on':''}" onclick="setTemplateManagerWeekday(${i})">${d}${wd?' '+(wd.getMonth()+1)+'/'+wd.getDate():''}</div>`; }).join('')}
-      <div style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:#f1f5f9;cursor:pointer;flex-shrink:0;" onclick="openTemplateManagerCalendar()">
-        ${ICONS.calendar.replace('currentColor','#4f46e5')}
-      </div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:10px;">
+      <span onclick="shiftWeek(-1)" style="cursor:pointer;">${ICONS.chevL}</span>
+      <span onclick="openMonthPicker()" style="font-size:14px;font-weight:800;cursor:pointer;text-decoration:underline;text-decoration-color:#cbd5e1;text-underline-offset:4px;">${monthTitle}</span>
+      <span onclick="shiftWeek(1)" style="cursor:pointer;">${ICONS.chevR}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:12px;">
+      ${weekDays.map(d=>{
+        const iso = toISO(d);
+        const has = STATE.classTemplates.some(tp=>templateWeekdayFor(tp)===d.getDay());
+        const sel = iso===selected;
+        return `<div class="day-chip" style="${sel?'background:#4f46e5;':''}" onclick="pickTemplateManagerDay('${iso}',${d.getDay()})">
+          <span style="font-size:10px;font-weight:700;color:${sel?'#c7d2fe':'#94a3b8'};">${WD[d.getDay()]}</span>
+          <span style="font-size:13px;font-weight:${sel?'800':'700'};color:${sel?'#fff':'#0f172a'};">${d.getDate()}</span>
+        <div style="width:4px;height:4px;border-radius:50%;background:${has?'#cbd5e1':'transparent'};"></div>
+      </div>`;
+      }).join('')}
     </div>
     <div style="margin-bottom:8px;"><span style="color:#4f46e5;font-size:12px;font-weight:800;cursor:pointer;" onclick="openAddTemplateManagerHour()">+ 시간 추가</span></div>`;
 
@@ -3287,13 +3278,19 @@ function reportsView(){
       <div style="font-size:24px;font-weight:800;margin-top:4px;">${totalRevenue.toLocaleString()}원</div>
     </div>
 
-    <div style="font-size:12px;font-weight:700;color:#94a3b8;margin:16px 0 8px 0;">코치별 매출</div>`;
+    <div style="font-size:12px;font-weight:700;color:#94a3b8;margin:16px 0 8px 0;">코치별 매출 (눌러서 상세보기)</div>`;
   const coachEntries = Object.keys(byCoach).sort((a,b)=>byCoach[b]-byCoach[a]);
   if (coachEntries.length===0) html += `<div style="font-size:13px;color:#94a3b8;">이 달 매출 내역이 없습니다.</div>`;
   coachEntries.forEach(cid=>{
-    html += `<div class="m-card" style="display:flex;align-items:center;justify-content:space-between;">
-      <span style="font-size:13px;font-weight:700;">${staffById(cid)?staffById(cid).name+' 코치':'미지정'}</span>
-      <span style="font-size:13px;font-weight:800;">${byCoach[cid].toLocaleString()}원</span>
+    const coach = staffById(cid);
+    const rate = coach ? COACH_COMMISSION_RATES[coach.name] : null;
+    const salary = rate!=null ? Math.round(byCoach[cid]*rate) : null;
+    html += `<div class="m-card" style="cursor:pointer;" onclick="openCoachRevenueDetail('${cid}')">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:13px;font-weight:700;">${coach?coach.name+' 코치':'미지정'}</span>
+        <span style="font-size:13px;font-weight:800;">${byCoach[cid].toLocaleString()}원</span>
+      </div>
+      ${salary!=null ? `<div style="font-size:11px;color:#4f46e5;font-weight:700;margin-top:4px;">급여(${Math.round(rate*100)}%) ${salary.toLocaleString()}원</div>` : ''}
     </div>`;
   });
 
@@ -3326,6 +3323,42 @@ function reportsView(){
   return html;
 }
 function shiftReportMonth(n){ STATE.reportMonth = addMonths(STATE.reportMonth || ym(fromISO(STATE.today)), n); render(); }
+// 코치별 급여율 (매출 대비 %) — 이름 기준. 목록에 없는 코치는 급여를 표시하지 않는다.
+const COACH_COMMISSION_RATES = { '유승우':0.32, '김다빈':0.32, '김공수':0.42, '이동선':1.0, '김종성':0.28 };
+function openCoachRevenueDetail(coachId){
+  const reportMonth = STATE.reportMonth || ym(fromISO(STATE.today));
+  const paidEnrs = STATE.enrollments.filter(e=>e.yearMonth===reportMonth && e.paymentStatus==='paid').filter(e=>{ const slot=slotById(e.slotId); return slot && slot.coachId===coachId; });
+  const pkgThisMonth = STATE.packages.filter(p=>p.purchasedAt && p.purchasedAt.slice(0,7)===reportMonth && p.defaultCoachId===coachId);
+  const byProduct = {};
+  paidEnrs.forEach(e=>{ byProduct[e.productId]=(byProduct[e.productId]||0)+(e.paymentAmount||0); });
+  pkgThisMonth.forEach(p=>{ byProduct[p.productId]=(byProduct[p.productId]||0)+(p.paymentAmount||0); });
+  const total = Object.values(byProduct).reduce((a,b)=>a+b,0);
+  const coach = staffById(coachId);
+  const rate = coach ? COACH_COMMISSION_RATES[coach.name] : null;
+  const salary = rate!=null ? Math.round(total*rate) : null;
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px;">${coach?coach.name:'-'} 코치 매출 상세</div>
+    <div style="font-size:12px;color:#94a3b8;font-weight:600;margin-bottom:14px;">${monthLabel(reportMonth)}</div>
+    <div style="display:flex;flex-direction:column;gap:2px;">
+      ${Object.keys(byProduct).length===0 ? `<div style="font-size:13px;color:#94a3b8;">내역이 없습니다.</div>` :
+        Object.keys(byProduct).sort((a,b)=>byProduct[b]-byProduct[a]).map(pid=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid #f1f5f9;">
+          <span style="font-size:13px;font-weight:700;">${productById(pid)?productById(pid).name:'-'}</span>
+          <span style="font-size:13px;font-weight:800;">${byProduct[pid].toLocaleString()}원</span>
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:10px;border-top:2px solid #0f172a;">
+      <span style="font-size:13px;font-weight:800;">합계</span>
+      <span style="font-size:14px;font-weight:800;">${total.toLocaleString()}원</span>
+    </div>
+    ${salary!=null ? `<div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
+      <span style="font-size:12px;color:#4f46e5;font-weight:700;">급여 (${Math.round(rate*100)}%)</span>
+      <span style="font-size:13px;color:#4f46e5;font-weight:800;">${salary.toLocaleString()}원</span>
+    </div>` : ''}
+  </div>`;
+  openModal(html);
+}
 
 /* ============================== 모달/시트 ============================== */
 function closeModal(){ document.getElementById('modalLayer').innerHTML=''; }
@@ -3960,6 +3993,12 @@ function renderWizard(){
 }
 
 function submitWizard(){
+  const w = wz();
+  const dup = findDuplicateMember(w.name, w.phone);
+  if (dup) { openDuplicateMemberConfirm(dup, 'proceedSubmitWizard', 'renderWizard'); return; }
+  proceedSubmitWizard();
+}
+function proceedSubmitWizard(){
   const w = wz();
   if (w.mode==='monthly') {
     createNewMember({mode:'monthly', name:w.name||'신규회원', phone:w.phone||'', weekday:w.weekday, time:w.time, coachId:w.coachId, productId:w.productId, courtId: w.courtId||STATE.courts[0]?.id, yearMonth: ym(fromISO(STATE.today)), amount: productById(w.productId).price,
