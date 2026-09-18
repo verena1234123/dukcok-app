@@ -2293,33 +2293,35 @@ function regStatusCoachListHtml(coachId, yearMonth){
     });
   });
   if (items.length===0) return `<div style="text-align:center;padding:40px 0;color:#94a3b8;font-size:13px;">배정된 정규수업이 없습니다.</div>`;
-  return items.map(({wd, h, cell})=>{
+  const cards = items.map(({wd, h, cell})=>{
     const { tpl, product, cap, members, court } = cell;
     const openSlots = cap!=null ? Math.max(0, cap-members.length) : 0;
-    return `<div class="m-card" style="margin-bottom:10px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <div>
-          <div style="font-size:13px;font-weight:800;">${WD[wd]} ${h}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-top:2px;">${court?court.name:''}${product?' · '+product.name:''}</div>
+    return `<div class="m-card" style="padding:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:4px;">
+        <div style="min-width:0;">
+          <div style="font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${WD[wd]} ${h}</div>
+          <div style="font-size:10px;color:#94a3b8;font-weight:600;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${court?court.name:''}${product?' · '+product.name:''}</div>
         </div>
-        <span class="cap-badge" style="font-size:11px;padding:4px 10px;flex-shrink:0;">${members.length}${cap!=null?'/'+cap:''}</span>
+        <span class="cap-badge" style="font-size:9px;padding:2px 7px;flex-shrink:0;">${members.length}${cap!=null?'/'+cap:''}</span>
       </div>
       <div style="display:flex;flex-direction:column;gap:2px;">
         ${members.map(x=>{
           const enr = STATE.enrollments.find(e=>e.slotId===x.slotId && e.yearMonth===yearMonth);
           const paid = enr ? enr.paymentStatus==='paid' : null;
-          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid #f1f5f9;">
-            <span style="font-size:13px;font-weight:700;cursor:pointer;" onclick="openMemberSheet('${x.member.id}')">${x.member.name}</span>
-            <span style="display:flex;align-items:center;gap:8px;">
-              ${paid===true?`<span class="avail-pill" style="background:#f0fdf4;color:#15803d;">등록완료</span>`:(paid===false?`<span class="avail-pill" style="background:#fef2f2;color:#b91c1c;">미등록</span>`:'')}
-              <span style="font-size:11px;color:#b91c1c;font-weight:700;cursor:pointer;" onclick="confirmCancelMemberSlot('${x.slotId}')">삭제</span>
+          const dot = paid===true ? '#22c55e' : (paid===false ? '#ef4444' : '#cbd5e1');
+          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-top:1px solid #f1f5f9;gap:4px;">
+            <span style="display:flex;align-items:center;gap:5px;min-width:0;cursor:pointer;" onclick="openMemberSheet('${x.member.id}')">
+              <span style="width:6px;height:6px;border-radius:50%;background:${dot};flex-shrink:0;"></span>
+              <span style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${x.member.name}</span>
             </span>
+            <span style="font-size:10px;color:#b91c1c;font-weight:700;cursor:pointer;flex-shrink:0;" onclick="confirmCancelMemberSlot('${x.slotId}')">삭제</span>
           </div>`;
         }).join('')}
       </div>
-      ${openSlots>0 ? `<div style="color:#4f46e5;font-size:12px;font-weight:800;cursor:pointer;margin-top:8px;" onclick="openAssignMemberToClass('${tpl.id}',${wd},'${h}','${tpl.courtId}')">+ 회원 추가</div>` : ''}
+      ${openSlots>0 ? `<div style="color:#4f46e5;font-size:10px;font-weight:800;cursor:pointer;margin-top:6px;" onclick="openAssignMemberToClass('${tpl.id}',${wd},'${h}','${tpl.courtId}')">+ 회원 추가</div>` : ''}
     </div>`;
   }).join('');
+  return `<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">${cards}</div>`;
 }
 // "전체"를 골랐을 때 — 요일×코트를 가로로 이어붙인 격자. 칸이 좁아 코치 이니셜+인원만 보여주고,
 // 눌러야 그 칸의 회원 명단(추가/취소)이 나오는 상세 시트를 연다.
