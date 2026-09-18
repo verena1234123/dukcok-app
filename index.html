@@ -121,7 +121,7 @@ function productRowToState(row){
   return { id:row.id, name:row.name, price:row.price, mode:row.registration_mode,
     ruleType: row.session_rule_type, ruleCount: row.session_rule_count,
     capacity: row.capacity, validDays: row.pack_valid_days, status: row.status,
-    bundlePrice: row.bundle_price };
+    bundlePrice: row.bundle_price, sortOrder: row.sort_order };
 }
 function templateRowToState(row){
   const o = rowToCamel(row);
@@ -319,7 +319,7 @@ async function refreshAllData(){
   const [staffRes, courtsRes, productsRes, membersRes, slotsRes, templatesRes] = await Promise.all([
     sb.from('staff').select('*'),
     sb.from('courts').select('*'),
-    sb.from('products').select('*'),
+    sb.from('products').select('*').order('sort_order', { ascending: true, nullsFirst: false }),
     sb.from('members').select('*').neq('status','withdrawn'),
     sb.from('member_slots').select('*').eq('status','active'),
     sb.from('class_templates').select('*')
@@ -816,9 +816,10 @@ async function submitAddProduct(){
   const capacity = parseInt(p.capacity)||1;
   const ruleCount = parseInt(p.ruleCount)||1;
   if (!name) { toast('상품명을 입력하세요'); return; }
+  const sortOrder = Math.max(0, ...STATE.products.map(x=>x.sortOrder||0)) + 1;
   let payload;
-  if (p.mode==='monthly') payload = { name, price, registration_mode:'monthly', session_rule_type:'fixed_count', session_rule_count: ruleCount, capacity };
-  else payload = { name, price, registration_mode:'session_pack', session_rule_count: ruleCount, capacity, pack_valid_days: parseInt(p.validDays)||90 };
+  if (p.mode==='monthly') payload = { name, price, registration_mode:'monthly', session_rule_type:'fixed_count', session_rule_count: ruleCount, capacity, sort_order: sortOrder };
+  else payload = { name, price, registration_mode:'session_pack', session_rule_count: ruleCount, capacity, pack_valid_days: parseInt(p.validDays)||90, sort_order: sortOrder };
   const { data, error } = await sb.from('products').insert(payload).select().single();
   if (error) { toast('추가 실패: '+error.message); return; }
   STATE.products.push(productRowToState(data));
@@ -1207,7 +1208,7 @@ function courtHourLinkKey(groups, courtId, t){
         let probe = hourPlusOne(t);
         while (courtHourLinkKey(groups, court.id, probe)===linkKey) { runHours++; probe = hourPlusOne(probe); }
       }
-      html += `<div class="m-card" style="padding:8px;height:100%;box-sizing:border-box;margin-top:0;${warn?'border-color:#fca5a5;background:#fffafa;':((linkedPrev||linkedNext)?'border:2px solid #c7d2fe;background:#f5f6ff;':'')}">`;
+      html += `<div class="m-card" style="padding:8px;height:100%;box-sizing:border-box;margin-top:0;display:flex;flex-direction:column;${warn?'border-color:#fca5a5;background:#fffafa;':((linkedPrev||linkedNext)?'border:2px solid #c7d2fe;background:#f5f6ff;':'')}">`;
       if (warn) {
         const txt = courtTimeWarnDetail[key] || (warn==='conflict' ? '코트 중복배정 · 코치 겹침' : `정원초과 ${list.length}/${cap!=null?cap:'-'}`);
         html += `<div style="display:flex;align-items:center;gap:3px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:3px 5px;margin-bottom:6px;color:#b91c1c;cursor:pointer;" onclick="event.stopPropagation();openConflictDetail('${selected}','${key}')">
@@ -1237,7 +1238,7 @@ function courtHourLinkKey(groups, courtId, t){
           </div>`;
         });
       }
-      html += `<div style="display:flex;justify-content:center;margin-top:6px;">
+      html += `<div style="display:flex;justify-content:flex-start;margin-top:auto;padding-top:6px;">
         <div style="width:22px;height:22px;border-radius:50%;background:#eef0ff;color:#4f46e5;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;cursor:pointer;line-height:1;" onclick="openCellActionMenu('${selected}',${weekday},'${t}','${court.id}')">+</div>
       </div>`;
       if (linkedNext) {
@@ -2712,7 +2713,52 @@ function jumpToTimetableDate(dateISO){
   STATE.weekStart = toISO(addDays(fromISO(dateISO), -fromISO(dateISO).getDay()));
   STATE.tab = 'timetable';
   STATE.timetableMode = 'view';
+  closeModal();
   render();
+}
+// 수업관리의 달력 버튼 — 전체 월간 달력을 보여주고, 날짜를 고르면 그 날짜가 속한 주의 시간표로 이동한다.
+function openTemplateManagerCalendar(){
+  const base = fromISO(STATE.selectedDate || STATE.today);
+  STATE._tplCalendar = { year: base.getFullYear(), month: base.getMonth() };
+  renderTemplateManagerCalendar();
+}
+function shiftTemplateManagerCalendar(n){
+  const mp = STATE._tplCalendar;
+  let m = mp.month+n, y = mp.year;
+  while (m>11){ m-=12; y++; }
+  while (m<0){ m+=12; y--; }
+  mp.month = m; mp.year = y;
+  renderTemplateManagerCalendar();
+}
+function renderTemplateManagerCalendar(){
+  const mp = STATE._tplCalendar;
+  const first = new Date(mp.year, mp.month, 1);
+  const startOffset = first.getDay();
+  const daysInMonth = new Date(mp.year, mp.month+1, 0).getDate();
+  const selected = STATE.selectedDate || STATE.today;
+  let cells = '';
+  for (let i=0;i<startOffset;i++) cells += `<div></div>`;
+  for (let d=1; d<=daysInMonth; d++) {
+    const iso = toISO(new Date(mp.year, mp.month, d));
+    const sel = iso===selected;
+    const isToday = iso===STATE.today;
+    cells += `<div onclick="jumpToTimetableDate('${iso}')" style="height:42px;display:flex;align-items:center;justify-content:center;border-radius:10px;cursor:pointer;${sel?'background:#4f46e5;':(isToday?'background:#eef0ff;':'')}">
+      <span style="font-size:13px;font-weight:${sel?'800':'600'};color:${sel?'#fff':'#0f172a'};">${d}</span>
+    </div>`;
+  }
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:16px;">
+      <span onclick="shiftTemplateManagerCalendar(-1)" style="cursor:pointer;">${ICONS.chevL}</span>
+      <span style="font-size:16px;font-weight:800;">${mp.year}년 ${mp.month+1}월</span>
+      <span onclick="shiftTemplateManagerCalendar(1)" style="cursor:pointer;">${ICONS.chevR}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px;">
+      ${WD.map((w,i)=>`<div style="text-align:center;font-size:11px;font-weight:700;color:${i===0?'#dc2626':(i===6?'#2563eb':'#94a3b8')};">${w}</div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">${cells}</div>
+  </div>`;
+  openModal(html);
 }
 function openAddTemplateManagerHour(){
   const weekday = STATE.templateManagerWeekday!=null ? STATE.templateManagerWeekday : 1;
@@ -2734,16 +2780,18 @@ function confirmAddTemplateManagerHour(t, weekday){
 }
 function classTemplateManagerView(){
   const weekday = STATE.templateManagerWeekday!=null ? STATE.templateManagerWeekday : 1;
+  const weekStart = fromISO(STATE.weekStart);
+  const weekDays = [...Array(7)].map((_,i)=>addDays(weekStart,i));
   let html = `<div style="padding:4px 18px 18px 18px;">
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#1d4ed8;font-weight:600;line-height:1.6;">
       요일·시간·코트별로 어느 코치가 어떤 상품(1:4/1:2) 수업을 하는지 여기서 배정합니다. 빈 칸을 누르면 새로 배정하고, 배정된 칸을 누르면 수정·삭제할 수 있습니다. 동료학습반처럼 상품 정원과 다른 인원을 받는 반은 "커스텀 정원"에 원하는 인원을 직접 적으면 됩니다.
     </div>
+    <div style="font-size:11px;color:#94a3b8;font-weight:700;margin-bottom:6px;">${weekStart.getFullYear()}년 ${weekStart.getMonth()+1}월</div>
     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
-      ${WD.map((d,i)=>`<div class="chip-select ${weekday===i?'on':''}" onclick="setTemplateManagerWeekday(${i})">${d}</div>`).join('')}
-      <label style="position:relative;display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:#f1f5f9;cursor:pointer;flex-shrink:0;">
+      ${WD.map((d,i)=>{ const wd = weekDays.find(x=>x.getDay()===i); return `<div class="chip-select ${weekday===i?'on':''}" onclick="setTemplateManagerWeekday(${i})">${d}${wd?' '+(wd.getMonth()+1)+'/'+wd.getDate():''}</div>`; }).join('')}
+      <div style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:#f1f5f9;cursor:pointer;flex-shrink:0;" onclick="openTemplateManagerCalendar()">
         ${ICONS.calendar.replace('currentColor','#4f46e5')}
-        <input type="date" style="position:absolute;inset:0;opacity:0;cursor:pointer;" onchange="jumpToTimetableDate(this.value)" />
-      </label>
+      </div>
     </div>
     <div style="margin-bottom:8px;"><span style="color:#4f46e5;font-size:12px;font-weight:800;cursor:pointer;" onclick="openAddTemplateManagerHour()">+ 시간 추가</span></div>`;
 
@@ -2890,19 +2938,60 @@ async function deleteClassTemplate(id){
   toast('삭제되었습니다');
 }
 function productManagerView(){
-  let html = `<div style="padding:4px 18px 18px 18px;">`;
+  let html = `<div style="padding:4px 18px 18px 18px;">
+    <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-bottom:8px;">☰ 아이콘을 눌러 위/아래로 끌면 순서를 바꿀 수 있습니다.</div>
+    <div id="productListBox">`;
   STATE.products.forEach(p=>{
-    html += `<div class="m-card" style="cursor:pointer;" onclick="openEditProductForm('${p.id}')">
-      <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div style="font-size:14px;font-weight:700;">${p.name}</div>
-        <span class="avail-pill" style="background:#eef0ff;color:#4338ca;">${p.mode==='monthly'?'월정기':'개인레슨'}</span>
+    html += `<div class="m-card" data-product-id="${p.id}" style="display:flex;align-items:center;gap:10px;">
+      <div style="cursor:grab;touch-action:none;color:#cbd5e1;font-size:16px;padding:4px;flex-shrink:0;" onpointerdown="startProductDrag(event,'${p.id}')">☰</div>
+      <div style="flex:1;min-width:0;cursor:pointer;" onclick="openEditProductForm('${p.id}')">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="font-size:14px;font-weight:700;">${p.name}</div>
+          <span class="avail-pill" style="background:#eef0ff;color:#4338ca;">${p.mode==='monthly'?'월정기':'개인레슨'}</span>
+        </div>
+        <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-top:4px;">${p.price.toLocaleString()}원 · 정원 ${p.capacity}명 · ${p.mode==='monthly'?'월 '+p.ruleCount+'회':'총 '+p.ruleCount+'회권'}</div>
+        <div style="font-size:10px;color:#4f46e5;font-weight:700;margin-top:6px;">눌러서 수정 (예: 1:4 → 1:2로 정원 변경)</div>
       </div>
-      <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-top:4px;">${p.price.toLocaleString()}원 · 정원 ${p.capacity}명 · ${p.mode==='monthly'?'월 '+p.ruleCount+'회':'총 '+p.ruleCount+'회권'}</div>
-      <div style="font-size:10px;color:#4f46e5;font-weight:700;margin-top:6px;">눌러서 수정 (예: 1:4 → 1:2로 정원 변경)</div>
     </div>`;
   });
-  html += `<div class="btn-secondary" style="margin-top:4px;" onclick="openAddProductForm()">+ 수강상품(정규반) 추가</div></div>`;
+  html += `</div><div class="btn-secondary" style="margin-top:4px;" onclick="openAddProductForm()">+ 수강상품(정규반) 추가</div></div>`;
   return html;
+}
+// 상품 순서 드래그 — 포인터 이벤트를 써서 마우스/터치 모두에서 동작한다.
+// 드래그 중에는 전체 render()를 다시 부르지 않고 DOM만 직접 옮기다가, 놓았을 때 한 번만 서버에 저장한다.
+function startProductDrag(ev, productId){
+  ev.preventDefault();
+  ev.stopPropagation();
+  const container = document.getElementById('productListBox');
+  const item = container.querySelector(`[data-product-id="${productId}"]`);
+  if (!item) return;
+  item.style.opacity = '0.5';
+  function onMove(e){
+    const y = e.clientY;
+    const siblings = [...container.children].filter(x=>x!==item);
+    let target = null;
+    for (const sib of siblings) {
+      const rect = sib.getBoundingClientRect();
+      if (y < rect.top + rect.height/2) { target = sib; break; }
+    }
+    if (target) container.insertBefore(item, target);
+    else container.appendChild(item);
+  }
+  function onUp(){
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    item.style.opacity = '';
+    const orderedIds = [...container.children].map(el=>el.dataset.productId);
+    commitProductOrder(orderedIds);
+  }
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+}
+async function commitProductOrder(orderedIds){
+  orderedIds.forEach((id,i)=>{ const p = STATE.products.find(x=>x.id===id); if (p) p.sortOrder = i; });
+  STATE.products.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
+  await Promise.all(orderedIds.map((id,i)=>sb.from('products').update({ sort_order: i }).eq('id', id)));
+  render();
 }
 function openEditProductForm(productId){
   const p = productById(productId);
