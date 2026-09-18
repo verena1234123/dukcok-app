@@ -742,6 +742,9 @@ async function createNewMember(payload){
   if (payload.mode==='monthly') {
     await addMonthlySlotForNewMember(newMember.id, payload);
     toast(`${payload.name} 회원이 가등록되었습니다 (자리만 우선 배정됨)`);
+  } else if (payload.mode==='other') {
+    closeModal(); render();
+    toast(`${payload.name} 회원이 등록되었습니다`);
   } else {
     const product = STATE.products.find(p=>p.mode==='session_pack');
     const { error } = await sb.rpc('create_provisional_package', {
@@ -1027,7 +1030,8 @@ function fabHtml(){
 function viewHtml(){
   switch(STATE.tab){
     case 'timetable':
-      if (STATE.timetableMode==='add') return (STATE.addClassTab==='makeup') ? makeupListView() : addClassView();
+      if (STATE.timetableMode==='add') return addClassView();
+      if (STATE.timetableMode==='makeup') return makeupListView();
       return timetableView();
     case 'availability': return availabilityView();
     case 'members': return membersView();
@@ -1040,27 +1044,20 @@ function viewHtml(){
 
 /* ---------- 1) 월간 시간표 ---------- */
 function setTimetableMode(m){ STATE.timetableMode = m; render(); }
-function setAddClassTab(t){ STATE.addClassTab = t; render(); }
 function timetableHeaderHtml(){
   const weekStart = fromISO(STATE.weekStart);
   const days = [...Array(7)].map((_,i)=>addDays(weekStart,i));
   const selected = STATE.selectedDate || STATE.today;
   const monthTitle = weekStart.getFullYear()+'년 '+(weekStart.getMonth()+1)+'월';
   const mode = STATE.timetableMode || 'view';
-  const addTab = STATE.addClassTab || 'hours';
   let html = `<div style="padding:10px 18px 0 18px;border-top:1px solid #f1f5f9;">
     <div style="display:flex;gap:6px;">
       <div class="chip-select ${mode==='view'?'on':''}" onclick="setTimetableMode('view')">시간표 보기</div>
       <div class="chip-select ${mode==='add'?'on':''}" onclick="setTimetableMode('add')">수업 추가</div>
-    </div>`;
-  if (mode==='add') {
-    html += `<div style="display:flex;gap:6px;margin-top:8px;">
-      <div class="chip-select ${addTab==='hours'?'on':''}" onclick="setAddClassTab('hours')">시간추가</div>
-      <div class="chip-select ${addTab==='makeup'?'on':''}" onclick="setAddClassTab('makeup')">보강자명단</div>
-    </div>`;
-  }
-  html += `</div>`;
-  if (mode==='view' || (mode==='add' && addTab==='hours')) {
+      <div class="chip-select ${mode==='makeup'?'on':''}" onclick="setTimetableMode('makeup')">보강자명단</div>
+    </div>
+  </div>`;
+  if (mode==='view' || mode==='add') {
     html += `<div style="padding:10px 18px 12px 18px;">
       <div style="display:flex;align-items:center;justify-content:center;gap:12px;">
         <span onclick="shiftWeek(-1)" style="cursor:pointer;">${ICONS.chevL}</span>
@@ -1418,6 +1415,9 @@ function addClassView(){
         html += `<div style="color:#cbd5e1;font-size:11px;font-weight:600;">정원 마감</div>`;
       }
       html += `<div style="color:#0d9488;font-size:10px;font-weight:800;cursor:pointer;margin-top:4px;" onclick="openBookPersonalSlot(${repCoachId?`'${repCoachId}'`:'null'}, ${weekday}, '${t}', '${selected}')">+ 개인레슨 배정</div>`;
+      if (list.length===0) {
+        html += `<div style="color:#0369a1;font-size:10px;font-weight:800;cursor:pointer;margin-top:4px;" onclick="openAddRegularSlotForm('${selected}',${weekday},'${t}','${court.id}',${repCoachId?`'${repCoachId}'`:'null'})">+ 레슨 추가</div>`;
+      }
       if (isOwner() && list.length===0) {
         html += `<div style="color:#7e22ce;font-size:10px;font-weight:800;cursor:pointer;margin-top:4px;" onclick="openAddAdhocClassForm('${selected}','${t}','${court.id}')">+ 수업 추가</div>`;
       }
@@ -1453,6 +1453,68 @@ function confirmAddExtraHour(t){
   STATE._addClassExtraHours[selected].add(t);
   closeModal();
   render();
+}
+
+/* ---------- 1b) 빈 코트/시간 슬롯에 정규수업 회원을 바로 등록한다 — 보강·개인레슨이 아니어도 된다 ---------- */
+function openAddRegularSlotForm(dateISO, weekday, time, courtId, repCoachId){
+  const coaches = activeCoaches();
+  STATE._regularSlot = { dateISO, weekday, time, courtId, coachId: repCoachId || (coaches[0]||{}).id, productId:(STATE.products.find(p=>p.mode==='monthly')||{}).id, memberId:null, memberQuery:'', forceOverride:false };
+  renderAddRegularSlotForm();
+}
+function regularSlotField(key, val){ STATE._regularSlot[key] = val; renderAddRegularSlotForm(); }
+function regularSlotSearch(el){
+  STATE._regularSlot.memberQuery = el.value;
+  const box = document.getElementById('regularSlotResults');
+  if (box) box.innerHTML = regularSlotResultsHtml();
+}
+function regularSlotResultsHtml(){
+  const r = STATE._regularSlot;
+  const q = (r.memberQuery||'').trim();
+  const results = q ? STATE.members.filter(m=>m.name.includes(q)).slice(0,20) : [];
+  return (q && results.length===0 ? `<div style="font-size:12px;color:#94a3b8;padding:6px 0;">일치하는 회원이 없습니다.</div>` : '')
+    + results.map(m=>`<div class="m-card" style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;cursor:pointer;" onclick="regularSlotField('memberId','${m.id}')">
+        <span style="font-size:13px;font-weight:700;">${m.name}</span>
+        <span style="font-size:11px;color:#4f46e5;font-weight:700;">+ 선택</span>
+      </div>`).join('');
+}
+function renderAddRegularSlotForm(){
+  const r = STATE._regularSlot;
+  const coaches = activeCoaches();
+  const products = STATE.products.filter(p=>p.mode==='monthly');
+  const m = r.memberId ? memberById(r.memberId) : null;
+  const conflict = monthlySlotConflict(r.weekday, r.time, r.courtId, r.coachId, r.productId, r.forceOverride);
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px;">레슨 추가</div>
+    <div style="font-size:12px;color:#94a3b8;font-weight:600;margin-bottom:14px;">${WD[r.weekday]} ${r.time} · ${courtById(r.courtId)?courtById(r.courtId).name:''} · 이 빈 자리에 정규수업 회원을 바로 등록합니다</div>
+    <div class="field-label">회원</div>
+    ${m ? `<div class="m-card" style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;">
+        <span style="font-size:13px;font-weight:700;">${m.name}</span>
+        <span style="font-size:11px;color:#b91c1c;font-weight:700;cursor:pointer;" onclick="regularSlotField('memberId', null)">변경</span>
+      </div>`
+      : `<input type="text" value="${r.memberQuery}" oninput="regularSlotSearch(this)" placeholder="회원 이름 검색" />
+      <div id="regularSlotResults" style="display:flex;flex-direction:column;gap:6px;margin-top:8px;max-height:200px;overflow-y:auto;">${regularSlotResultsHtml()}</div>`}
+    <div class="field-label" style="margin-top:12px;">담당 코치</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${coaches.map(c=>`<div class="chip-select ${r.coachId===c.id?'on':''}" onclick="regularSlotField('coachId','${c.id}')">${c.name}</div>`).join('')}</div>
+    <div class="field-label" style="margin-top:12px;">수강상품</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">${products.map(p=>`
+      <div class="choice-card ${r.productId===p.id?'picked':''}" style="padding:12px 14px;" onclick="regularSlotField('productId','${p.id}')">
+        <div style="flex:1;"><div style="font-size:13px;font-weight:800;">${p.name}</div><div style="font-size:12px;color:#64748b;font-weight:600;margin-top:2px;">${p.price.toLocaleString()}원 / 월</div></div>
+        ${r.productId===p.id?ICONS.check.replace(/width="12" height="12"/,'width="16" height="16"').replace('currentColor','#4f46e5'):''}
+      </div>`).join('')}</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:14px;">
+      <input type="checkbox" ${r.forceOverride?'checked':''} onchange="regularSlotField('forceOverride', this.checked)" style="width:16px;height:16px;flex-shrink:0;" />
+      <span style="font-size:12px;color:#334155;font-weight:600;">정원 초과를 허용합니다 (예: 2시간 동안 인원을 나눠 받는 특수 배정)</span>
+    </div>
+    ${conflict ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:12px 14px;margin-top:14px;font-size:12px;color:#b91c1c;font-weight:700;line-height:1.6;">${conflict.detail}</div>` : ''}
+    <div class="btn-primary ${(!m||conflict)?'disabled':''}" style="margin-top:16px;" onclick="submitRegularSlot()">등록하기</div>
+  </div>`;
+  openModal(html);
+}
+async function submitRegularSlot(){
+  const r = STATE._regularSlot;
+  if (!r.memberId) { toast('회원을 선택하세요'); return; }
+  await addMonthlySlot(r.memberId, r.weekday, r.time, r.coachId, r.productId, r.courtId, !!r.forceOverride);
 }
 
 /* ---------- 1c) 관리자 전용 — 코트가 비어있으면 그 자리에서 바로 특수 반(동료학습반 등)을 만든다 ----------
@@ -2467,7 +2529,7 @@ function settingsView(){
     <div style="display:flex;gap:6px;overflow-x:auto;">
       <div class="chip-select ${tab==='payments'?'on':''}" onclick="setSettingsTab('payments')">결제관리</div>
       <div class="chip-select ${tab==='coaches'?'on':''}" onclick="setSettingsTab('coaches')">코치 관리</div>
-      <div class="chip-select ${tab==='templates'?'on':''}" onclick="setSettingsTab('templates')">코트 배정</div>
+      <div class="chip-select ${tab==='templates'?'on':''}" onclick="setSettingsTab('templates')">수업관리</div>
       <div class="chip-select ${tab==='products'?'on':''}" onclick="setSettingsTab('products')">상품 관리</div>
       <div class="chip-select ${tab==='reports'?'on':''}" onclick="setSettingsTab('reports')">매출 리포트</div>
       <div class="chip-select ${tab==='bulk'?'on':''}" onclick="setSettingsTab('bulk')">일괄 등록</div>
@@ -2554,34 +2616,70 @@ function openAddCourtForm(){
   </div>`;
   openModal(html);
 }
+function setTemplateManagerWeekday(w){ STATE.templateManagerWeekday = w; render(); }
+function openAddTemplateManagerHour(){
+  const weekday = STATE.templateManagerWeekday!=null ? STATE.templateManagerWeekday : 1;
+  STATE._newTplExtraHour = STATE._newTplExtraHour || '05:00';
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:14px;">시간 추가</div>
+    <select id="new_tpl_extra_hour">${EXTRA_HOUR_OPTIONS.map(t=>`<option value="${t}" ${t===STATE._newTplExtraHour?'selected':''}>${t}</option>`).join('')}</select>
+    <div class="btn-primary" style="margin-top:16px;" onclick="confirmAddTemplateManagerHour(document.getElementById('new_tpl_extra_hour').value, ${weekday})">추가하기</div>
+  </div>`;
+  openModal(html);
+}
+function confirmAddTemplateManagerHour(t, weekday){
+  STATE._templateManagerExtraHours = STATE._templateManagerExtraHours || {};
+  STATE._templateManagerExtraHours[weekday] = STATE._templateManagerExtraHours[weekday] || new Set();
+  STATE._templateManagerExtraHours[weekday].add(t);
+  closeModal();
+  render();
+}
 function classTemplateManagerView(){
+  const weekday = STATE.templateManagerWeekday!=null ? STATE.templateManagerWeekday : 1;
   let html = `<div style="padding:4px 18px 18px 18px;">
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#1d4ed8;font-weight:600;line-height:1.6;">
-      코치가 어느 요일·시간에 어느 코트에서 어떤 상품(1:4/1:2) 수업을 하는지 여기서 먼저 배정해두면, 회원이 아직 한 명도 없어도 잔여석 현황판에 빈 자리로 바로 나타납니다. 동료학습반처럼 상품 정원과 다른 인원을 받는 반은 "커스텀 정원"에 원하는 인원을 직접 적으면, 시간·정원을 자유롭게 정한 반을 언제든 새로 만들 수 있습니다.
-    </div>`;
-  const coachList = activeCoaches();
-  coachList.forEach(c=>{
-    const templates = STATE.classTemplates.filter(t=>t.coachId===c.id).sort((a,b)=>a.weekday-b.weekday || a.startTime.localeCompare(b.startTime));
-    html += `<div class="m-card" style="margin-bottom:10px;">
-      <div style="font-size:13px;font-weight:800;margin-bottom:8px;">${c.name} 코치</div>
-      ${templates.length===0 ? `<div style="font-size:12px;color:#94a3b8;">배정된 시간이 없습니다.</div>` : templates.map(t=>{
-        const product = productById(t.productId);
-        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid #f1f5f9;">
-          <span style="font-size:12px;font-weight:700;">${WD[t.weekday]} ${t.startTime}~${t.endTime} · ${courtById(t.courtId)?courtById(t.courtId).name:'-'} · ${product?product.name.split(' ')[0]:'-'}${t.customCapacity?` · 정원 ${t.customCapacity}명(커스텀)`:''}</span>
-          <span style="display:flex;align-items:center;gap:12px;">
-            <span style="font-size:11px;color:#4f46e5;font-weight:700;cursor:pointer;" onclick="openEditTemplateForm('${t.id}')">수정</span>
-            <span style="font-size:11px;color:#b91c1c;font-weight:700;cursor:pointer;" onclick="deleteClassTemplate('${t.id}')">삭제</span>
-          </span>
+      요일·시간·코트별로 어느 코치가 어떤 상품(1:4/1:2) 수업을 하는지 여기서 배정합니다. 빈 칸을 누르면 새로 배정하고, 배정된 칸을 누르면 수정·삭제할 수 있습니다. 동료학습반처럼 상품 정원과 다른 인원을 받는 반은 "커스텀 정원"에 원하는 인원을 직접 적으면 됩니다.
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${WD.map((d,i)=>`<div class="chip-select ${weekday===i?'on':''}" onclick="setTemplateManagerWeekday(${i})">${d}</div>`).join('')}</div>
+    <div style="margin-bottom:8px;"><span style="color:#4f46e5;font-size:12px;font-weight:800;cursor:pointer;" onclick="openAddTemplateManagerHour()">+ 시간 추가</span></div>`;
+
+  const hoursWithTpl = OPERATING_HOURS.filter(t=>STATE.classTemplates.some(tp=>tp.weekday===weekday && templateHours(tp).includes(t)));
+  const manualExtra = [...((STATE._templateManagerExtraHours && STATE._templateManagerExtraHours[weekday]) || [])];
+  const hours = [...new Set([...hoursWithTpl, ...manualExtra])].sort();
+
+  if (hours.length===0) {
+    html += `<div style="text-align:center;padding:30px 0;color:#94a3b8;font-size:13px;">${WD[weekday]}요일에 배정된 수업이 없습니다. "+ 시간 추가"를 눌러 시작하세요.</div>`;
+  }
+
+  hours.forEach(t=>{
+    html += `<div style="font-size:12px;font-weight:700;color:#0f172a;margin:10px 0 6px 0;">${t}</div>
+    <div style="display:grid;grid-template-columns:repeat(${STATE.courts.length},1fr);gap:6px;margin-bottom:4px;">`;
+    STATE.courts.forEach(court=>{
+      const tpl = STATE.classTemplates.find(x=>x.weekday===weekday && x.courtId===court.id && templateHours(x).includes(t));
+      if (tpl) {
+        const product = productById(tpl.productId);
+        const coach = staffById(tpl.coachId);
+        html += `<div class="m-card" style="padding:8px;margin-top:0;cursor:pointer;${coach?`background:${coachColor(tpl.coachId)};`:''}" onclick="openEditTemplateForm('${tpl.id}')">
+          <div style="font-size:11px;font-weight:800;${coach?`color:${coachTextColor(tpl.coachId)};`:''}">${court.name}${coach?' · '+coach.name:''}</div>
+          <div style="font-size:10px;font-weight:700;margin-top:2px;${coach?`color:${coachTextColor(tpl.coachId)};`:'color:#64748b;'}">${product?product.name.split(' ')[0]:'-'}${tpl.customCapacity?` · 정원 ${tpl.customCapacity}명`:''}</div>
+          <div style="font-size:9px;margin-top:4px;">
+            <span style="font-weight:800;cursor:pointer;${coach?`color:${coachTextColor(tpl.coachId)};`:'color:#4f46e5;'}" onclick="event.stopPropagation();openEditTemplateForm('${tpl.id}')">수정</span>
+            <span style="font-weight:800;cursor:pointer;margin-left:10px;color:#dc2626;" onclick="event.stopPropagation();deleteClassTemplate('${tpl.id}')">삭제</span>
+          </div>
         </div>`;
-      }).join('')}
-    </div>`;
+      } else {
+        html += `<div class="m-card" style="padding:8px;margin-top:0;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;font-size:11px;font-weight:700;" onclick="openAddTemplateForm(${weekday},'${t}','${court.id}')">+ 배정</div>`;
+      }
+    });
+    html += `</div>`;
   });
-  html += `<div class="btn-secondary" style="margin-top:4px;" onclick="openAddTemplateForm()">+ 코트 배정 추가</div></div>`;
+  html += `</div>`;
   return html;
 }
-function openAddTemplateForm(){
+function openAddTemplateForm(weekday, startTime, courtId){
   const coaches = activeCoaches();
-  STATE._newTemplate = { editId:null, coachId:(coaches[0]||{}).id, weekday:1, startTime:'18:00', endTime:'19:00', courtId:STATE.courts[0]?.id, productId:(STATE.products.find(p=>p.mode==='monthly')||{}).id, customCapacity:'' };
+  STATE._newTemplate = { editId:null, coachId:(coaches[0]||{}).id, weekday: weekday!=null?weekday:1, startTime: startTime||'18:00', endTime: startTime?hourPlusOne(startTime):'19:00', courtId: courtId||STATE.courts[0]?.id, productId:(STATE.products.find(p=>p.mode==='monthly')||{}).id, customCapacity:'' };
   renderAddTemplateForm();
 }
 function openEditTemplateForm(id){
@@ -2599,7 +2697,7 @@ function renderAddTemplateForm(){
   const endOptions = [...OPERATING_HOURS.slice(1), hourPlusOne(OPERATING_HOURS[OPERATING_HOURS.length-1])];
   const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
   <div style="padding:6px 20px 20px 20px;">
-    <div style="font-size:16px;font-weight:800;margin-bottom:14px;">${isEdit?'코트 배정 수정':'코트 배정 추가'}</div>
+    <div style="font-size:16px;font-weight:800;margin-bottom:14px;">${isEdit?'수업 수정':'수업 추가'}</div>
     <div class="field-label">코치</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">${coaches.map(c=>`<div class="chip-select ${t.coachId===c.id?'on':''}" onclick="newTemplateField('coachId','${c.id}')">${c.name}</div>`).join('')}</div>
     <div class="field-label" style="margin-top:12px;">요일</div>
@@ -2638,11 +2736,11 @@ async function submitAddTemplate(){
     const { error } = await sb.from('class_templates').insert(payload);
     if (error) { toast('저장 실패: '+error.message); return; }
   }
-  await addLog(null, '', `코트 배정 ${isEdit?'수정':'추가'}: ${staffById(t.coachId).name} 코치 · ${WD[t.weekday]} ${t.startTime}~${t.endTime} · ${courtById(t.courtId).name} · ${productById(t.productId).name}`);
+  await addLog(null, '', `수업 배정 ${isEdit?'수정':'추가'}: ${staffById(t.coachId).name} 코치 · ${WD[t.weekday]} ${t.startTime}~${t.endTime} · ${courtById(t.courtId).name} · ${productById(t.productId).name}`);
   const { data } = await sb.from('class_templates').select('*');
   STATE.classTemplates = (data||[]).map(templateRowToState);
   closeModal(); render();
-  toast(isEdit ? '코트 배정이 수정되었습니다' : '코트가 배정되었습니다');
+  toast(isEdit ? '수업이 수정되었습니다' : '수업이 배정되었습니다');
 }
 async function deleteClassTemplate(id){
   const { error } = await sb.from('class_templates').delete().eq('id', id);
@@ -3482,10 +3580,15 @@ function wz(){ return STATE._wizard; }
 function wizardNext(){
   const w = wz();
   if (w.step===1 && !w.name.trim()) return;
-  if (w.step===2 && w.mode==='monthly' && monthlySlotConflict(w.weekday, w.time, w.courtId, w.coachId, w.productId, w.forceOverride)) { toast('이 요일·시간·코트는 등록할 수 없습니다'); return; }
+  if (w.step===2 && w.mode==='monthly' && monthlySlotConflict(w.weekday, w.time, w.courtId, w.coachId, w.productId, false)) { toast('이 요일·시간·코트는 등록할 수 없습니다'); return; }
+  if (w.step===1 && w.mode==='other') { w.step = 3; renderWizard(); return; }
   w.step++; renderWizard();
 }
-function wizardBack(){ wz().step--; if (wz().step<1){ closeModal(); return; } renderWizard(); }
+function wizardBack(){
+  const w = wz();
+  if (w.step===3 && w.mode==='other') { w.step = 1; renderWizard(); return; }
+  w.step--; if (w.step<1){ closeModal(); return; } renderWizard();
+}
 function wizardSetMode(mode){ wz().mode = mode; renderWizard(); }
 function wizardField(key, val){ wz()[key] = val; renderWizard(); }
 // 여기서 절대 renderWizard()로 다시 그리지 않는다 — 입력할 때마다 전체를 다시 그리면
@@ -3526,6 +3629,11 @@ function renderWizard(){
           <div style="flex:1;"><div style="font-size:14px;font-weight:800;">개인레슨 (1:1)</div><div style="font-size:12px;color:#64748b;margin-top:3px;">고정 요일 없이 회차권 구매 · 건별 예약</div></div>
           ${w.mode==='package'?ICONS.check.replace(/width="12" height="12"/,'width="18" height="18"').replace('currentColor','#4f46e5'):''}
         </div>
+        <div class="choice-card ${w.mode==='other'?'picked':''}" onclick="wizardSetMode('other')">
+          ${ICONS.plus.replace(/width="22" height="22"/,'width="18" height="18"').replace(/stroke="#fff"/, w.mode==='other'?'stroke="#4f46e5"':'stroke="#64748b"')}
+          <div style="flex:1;"><div style="font-size:14px;font-weight:800;">기타</div><div style="font-size:12px;color:#64748b;margin-top:3px;">수업 배정 없이 회원 정보만 먼저 등록</div></div>
+          ${w.mode==='other'?ICONS.check.replace(/width="12" height="12"/,'width="18" height="18"').replace('currentColor','#4f46e5'):''}
+        </div>
       </div>
     </div>`;
   } else if (w.step===2 && w.mode==='monthly') {
@@ -3546,11 +3654,7 @@ function renderWizard(){
         <div style="flex:1;"><div style="font-size:13px;font-weight:800;">${p.name}</div><div style="font-size:12px;color:#64748b;font-weight:600;margin-top:2px;">${p.price.toLocaleString()}원 / 월</div></div>
         ${w.productId===p.id?ICONS.check.replace(/width="12" height="12"/,'width="16" height="16"').replace('currentColor','#4f46e5'):''}
       </div>`).join('')}</div>
-    <div style="display:flex;align-items:center;gap:8px;margin-top:14px;">
-      <input type="checkbox" id="wz_force" ${w.forceOverride?'checked':''} onchange="wizardField('forceOverride', this.checked)" style="width:16px;height:16px;flex-shrink:0;" />
-      <span style="font-size:12px;color:#334155;font-weight:600;">정원 초과를 허용합니다 (예: 2시간 동안 인원을 나눠 받는 특수 배정)</span>
-    </div>
-    ${(()=>{ const conflict = monthlySlotConflict(w.weekday, w.time, w.courtId, w.coachId, w.productId, w.forceOverride); return conflict ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:12px 14px;margin-top:14px;font-size:12px;color:#b91c1c;font-weight:700;line-height:1.6;">${conflict.detail} — 다른 요일·시간·코트를 선택해주세요.</div>` : ''; })()}`;
+    ${(()=>{ const conflict = monthlySlotConflict(w.weekday, w.time, w.courtId, w.coachId, w.productId, false); return conflict ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:12px 14px;margin-top:14px;font-size:12px;color:#b91c1c;font-weight:700;line-height:1.6;">${conflict.detail} — 다른 요일·시간·코트를 선택해주세요.</div>` : ''; })()}`;
   } else if (w.step===2 && w.mode==='package') {
     const coaches = activeCoaches();
     const product = STATE.products.find(p=>p.mode==='session_pack');
@@ -3562,6 +3666,14 @@ function renderWizard(){
       <div style="flex:1;"><div style="font-size:13px;font-weight:800;">${product.name}</div><div style="font-size:12px;color:#64748b;font-weight:600;margin-top:2px;">${product.price.toLocaleString()}원</div></div>
       ${ICONS.check.replace(/width="12" height="12"/,'width="16" height="16"').replace('currentColor','#4f46e5')}
     </div>` : `<div style="font-size:13px;color:#94a3b8;">개인레슨 상품이 아직 없습니다. 설정 &gt; 상품 관리에서 먼저 추가해주세요.</div>`}`;
+  } else if (w.step===3 && w.mode==='other') {
+    body = `
+    <div class="m-card">
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;"><span class="row-label">이름</span><span class="row-value">${w.name||'-'}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;"><span class="row-label">연락처</span><span class="row-value">${w.phone||'-'}</span></div>
+    </div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin-top:12px;font-size:11px;color:#64748b;line-height:1.6;">회원 정보만 먼저 등록됩니다. 수업 배정은 시간표 &gt; 수업추가에서 나중에 하면 됩니다.</div>
+    `;
   } else if (w.step===3) {
     const isMonthly = w.mode==='monthly';
     const product = isMonthly ? productById(w.productId) : STATE.products.find(p=>p.mode==='session_pack');
@@ -3599,7 +3711,7 @@ function renderWizard(){
   }
 
   const canNext = w.step===1 ? (w.name.trim().length>0)
-    : (w.step===2 && w.mode==='monthly') ? !monthlySlotConflict(w.weekday, w.time, w.courtId, w.coachId, w.productId, w.forceOverride)
+    : (w.step===2 && w.mode==='monthly') ? !monthlySlotConflict(w.weekday, w.time, w.courtId, w.coachId, w.productId, false)
     : true;
   const footer = w.step<3
     ? `<div class="btn-primary ${canNext?'':'disabled'}" onclick="wizardNext()">다음</div>`
@@ -3622,12 +3734,14 @@ function submitWizard(){
   const w = wz();
   if (w.mode==='monthly') {
     createNewMember({mode:'monthly', name:w.name||'신규회원', phone:w.phone||'', weekday:w.weekday, time:w.time, coachId:w.coachId, productId:w.productId, courtId: w.courtId||STATE.courts[0]?.id, yearMonth: ym(fromISO(STATE.today)), amount: productById(w.productId).price,
-      method: w.payMethod, cardCompany: w.cardCompany, paid: false, forceOverride: !!w.forceOverride,
+      method: w.payMethod, cardCompany: w.cardCompany, paid: false, forceOverride: false,
       expectedReceivedBy: w.payMethod==='현장결제'?w.expectedReceivedBy:null, expectedTransferName: w.payMethod==='계좌이체'?w.expectedTransferName:null});
-  } else {
+  } else if (w.mode==='package') {
     createNewMember({mode:'package', name:w.name||'신규회원', phone:w.phone||'', coachId:w.packageCoachId,
       method: w.payMethod, cardCompany: w.cardCompany,
       expectedReceivedBy: w.payMethod==='현장결제'?w.expectedReceivedBy:null, expectedTransferName: w.payMethod==='계좌이체'?w.expectedTransferName:null});
+  } else {
+    createNewMember({mode:'other', name:w.name||'신규회원', phone:w.phone||''});
   }
 }
 
