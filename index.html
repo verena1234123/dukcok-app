@@ -2327,38 +2327,26 @@ function regStatusCoachListHtml(coachId, yearMonth){
 // 눌러야 그 칸의 회원 명단(추가/취소)이 나오는 상세 시트를 연다.
 function regStatusAllGridHtml(yearMonth){
   const courts = STATE.courts;
-  const cellsByHour = {};
-  OPERATING_HOURS.forEach(h=>{
-    const row = [];
-    REGSTATUS_WEEKDAYS.forEach(wd=>{ courts.forEach(court=>{ row.push(regStatusCell(wd, h, court.id)); }); });
-    if (row.some(c=>c)) cellsByHour[h] = row;
-  });
-  const hours = Object.keys(cellsByHour).sort();
-  if (hours.length===0) return `<div style="text-align:center;padding:40px 0;color:#94a3b8;font-size:13px;">배정된 정규수업이 없습니다.</div>`;
-  const totalCols = REGSTATUS_WEEKDAYS.length * courts.length;
-  const colW = 52;
-  let html = `<div style="display:grid;grid-template-columns:36px repeat(${totalCols},${colW}px);gap:3px;min-width:${36+totalCols*colW}px;">
-    <div></div>
-    ${REGSTATUS_WEEKDAYS.map(wd=>`<div style="grid-column:span ${courts.length};text-align:center;font-size:11px;font-weight:800;color:#64748b;padding:2px 0;">${WD[wd]}</div>`).join('')}
-    <div></div>
-    ${REGSTATUS_WEEKDAYS.map(()=>courts.map(court=>`<div style="text-align:center;font-size:9px;font-weight:700;color:#cbd5e1;">${court.name.replace('코트','')}</div>`).join('')).join('')}`;
-  hours.forEach(h=>{
-    html += `<div style="position:sticky;left:0;background:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#0f172a;">${h}</div>`;
-    let ci = 0;
-    REGSTATUS_WEEKDAYS.forEach(wd=>{
+  const items = [];
+  REGSTATUS_WEEKDAYS.forEach(wd=>{
+    OPERATING_HOURS.forEach(h=>{
       courts.forEach(court=>{
-        const cell = cellsByHour[h][ci++];
-        if (!cell) { html += `<div style="border:1px dashed #f1f5f9;border-radius:6px;min-height:34px;"></div>`; return; }
-        const coach = staffById(cell.tpl.coachId);
-        html += `<div style="border-radius:6px;min-height:34px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;background:${coachColor(cell.tpl.coachId)};" onclick="openRegStatusCellDetail(${wd},'${h}','${court.id}')">
-          <span style="font-size:9px;font-weight:800;color:${coachTextColor(cell.tpl.coachId)};">${coach?coach.name[0]:'-'}</span>
-          <span style="font-size:9px;font-weight:700;color:${coachTextColor(cell.tpl.coachId)};">${cell.members.length}${cell.cap!=null?'/'+cell.cap:''}</span>
-        </div>`;
+        const cell = regStatusCell(wd, h, court.id);
+        if (cell) items.push({ wd, h, court, cell });
       });
     });
   });
-  html += `</div>`;
-  return html;
+  if (items.length===0) return `<div style="text-align:center;padding:40px 0;color:#94a3b8;font-size:13px;">배정된 정규수업이 없습니다.</div>`;
+  const cards = items.map(({wd, h, court, cell})=>{
+    const coach = staffById(cell.tpl.coachId);
+    const txt = coachTextColor(cell.tpl.coachId);
+    return `<div style="border-radius:14px;padding:10px;cursor:pointer;background:${coachColor(cell.tpl.coachId)};" onclick="openRegStatusCellDetail(${wd},'${h}','${court.id}')">
+      <div style="font-size:10px;font-weight:700;color:${txt};opacity:0.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${WD[wd]} ${h} · ${court.name}</div>
+      <div style="font-size:15px;font-weight:800;color:${txt};margin-top:4px;">${coach?coach.name:'-'}</div>
+      <div style="font-size:13px;font-weight:700;color:${txt};margin-top:2px;">${cell.members.length}${cell.cap!=null?'/'+cell.cap:''}</div>
+    </div>`;
+  }).join('');
+  return `<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">${cards}</div>`;
 }
 function openRegStatusCellDetail(weekday, time, courtId){
   const yearMonth = STATE.regStatusMonth || ym(fromISO(STATE.today));
