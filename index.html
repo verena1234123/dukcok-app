@@ -931,7 +931,7 @@ function availLabel(remaining){
 /* ============================== 렌더링 ============================== */
 function render(){
   const root = document.getElementById('appRoot');
-  const stickyExtra = STATE.tab==='timetable' ? timetableHeaderHtml() : (STATE.tab==='myinfo' ? myInfoHeaderHtml() : (STATE.tab==='members' ? membersHeaderHtml() : ''));
+  const stickyExtra = STATE.tab==='timetable' ? timetableHeaderHtml() : (STATE.tab==='myinfo' ? myInfoHeaderHtml() : (STATE.tab==='memberslist' ? memberListHeaderHtml() : (STATE.tab==='regstatus' ? regStatusHeaderHtml() : '')));
   root.innerHTML = '<div class="sticky-top-wrap">' + topbarHtml() + stickyExtra + '</div>'
     + '<div id="mainView">' + viewHtml() + '</div>' + bottomNavHtml() + fabHtml();
 }
@@ -1039,9 +1039,10 @@ function setTab(tab){ if (tab==='settings' && !isOwner()) return; if (tab==='his
 
 function bottomNavHtml(){
   const items = [
+    {id:'memberslist', icon:ICONS.users, label:'회원'},
+    {id:'regstatus', icon:ICONS.card, label:'등록현황'},
     {id:'timetable', icon:ICONS.calendar, label:'시간표'},
     {id:'availability', icon:ICONS.chart, label:'잔여석'},
-    {id:'members', icon:ICONS.users, label:'회원'},
     isOwner() ? {id:'history', icon:ICONS.history, label:'이력'} : {id:'myinfo', icon:ICONS.history, label:'내수업'},
     isOwner() ? {id:'settings', icon:ICONS.settings, label:'설정'} : null
   ].filter(Boolean);
@@ -1051,7 +1052,7 @@ function bottomNavHtml(){
 }
 
 function fabHtml(){
-  if (STATE.tab==='members') return `<div class="fab" onclick="openNewMemberWizard()">${ICONS.plus}</div>`;
+  if (STATE.tab==='memberslist') return `<div class="fab" onclick="openNewMemberWizard()">${ICONS.plus}</div>`;
   return '';
 }
 
@@ -1061,7 +1062,8 @@ function viewHtml(){
       if (STATE.timetableMode==='makeup') return makeupListView();
       return timetableView();
     case 'availability': return availabilityView();
-    case 'members': return membersView();
+    case 'memberslist': return membersView();
+    case 'regstatus': return memberRegistrationStatusView();
     case 'history': return historyView();
     case 'settings': return settingsView();
     case 'myinfo': return myInfoView();
@@ -2239,52 +2241,37 @@ async function confirmPersonalSlotProvisional(){
 
 /* ---------- 3) 회원목록 ---------- */
 // 시간표/내수업 탭과 같은 방식으로, 회원 검색창+필터는 render()의 sticky-top-wrap 안에 넣어서
-// 목록을 스크롤해도 항상 눌러서 검색할 수 있게 고정한다 (membersHeaderHtml, render()에서 사용).
-function setMembersTab(t){ STATE.membersTab = t; render(); }
+// 목록을 스크롤해도 항상 눌러서 검색할 수 있게 고정한다 (memberListHeaderHtml/regStatusHeaderHtml, render()에서 사용).
 function setRegStatusMonth(m){ STATE.regStatusMonth = m; render(); }
 function setRegStatusCoach(c){ STATE.regStatusCoach = c; render(); }
-function membersHeaderHtml(){
-  const tab = STATE.membersTab || 'list';
-  let html = `<div style="padding:14px 18px 10px 18px;border-top:1px solid #f1f5f9;background:#fff;">
-    <div style="display:flex;gap:6px;margin-bottom:10px;">
-      <div class="chip-select ${tab==='list'?'on':''}" onclick="setMembersTab('list')">회원명단</div>
-      <div class="chip-select ${tab==='status'?'on':''}" onclick="setMembersTab('status')">회원등록현황</div>
-    </div>`;
-  if (tab==='list') {
-    const q = STATE.memberQuery || '';
-    const filter = STATE.memberFilter || 'all';
-    const coachFilter = STATE.memberCoachFilter || 'all';
-    const coaches = activeCoaches();
-    html += `<div style="display:flex;align-items:center;gap:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:9px 12px;">
+// 회원명단 — 회원 자체의 정보만 관리한다 (코치/반 분류 없음). 여기서 신규 회원을 등록한다.
+function memberListHeaderHtml(){
+  const q = STATE.memberQuery || '';
+  return `<div style="padding:14px 18px 10px 18px;border-top:1px solid #f1f5f9;background:#fff;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:10px;">회원명단 (${STATE.members.length}명)</div>
+    <div style="display:flex;align-items:center;gap:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:9px 12px;">
       <span style="display:flex;color:#94a3b8;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg></span>
       <input type="text" oninput="setMemberQuery(this)" value="${q}" placeholder="회원 이름 검색" style="border:none;padding:0;background:transparent;flex:1;font-size:13px;" />
     </div>
-    <div style="display:flex;gap:6px;margin-top:10px;overflow-x:auto;">
-      <div class="chip-select ${filter==='all'?'on':''}" onclick="setMemberFilter('all')">전체</div>
-      <div class="chip-select ${filter==='monthly'?'on':''}" onclick="setMemberFilter('monthly')">정규수업</div>
-      <div class="chip-select ${filter==='package'?'on':''}" onclick="setMemberFilter('package')">개인레슨</div>
-    </div>
-    <div style="display:flex;gap:6px;margin-top:8px;overflow-x:auto;">
-      <div class="chip-select ${coachFilter==='all'?'on':''}" style="${coachFilter==='all'?'':'background:#eef0ff;color:#4338ca;'}" onclick="setMemberCoachFilter('all')">전체 코치</div>
-      ${coaches.map(c=>`<div class="chip-select ${coachFilter===c.id?'on':''}" style="${coachFilter===c.id?'':`background:${coachColor(c.id)};color:${coachTextColor(c.id)};`}" onclick="setMemberCoachFilter('${c.id}')">${c.name}</div>`).join('')}
-    </div>`;
-  } else {
-    const month = STATE.regStatusMonth || (new Date().getMonth()+1);
-    const coachFilter = STATE.regStatusCoach || 'all';
-    const coaches = activeCoaches();
-    html += `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;">
+  </div>`;
+}
+// 회원등록현황 — 어느 회원이 어느 월/코치/수업에 등록됐는지 관리한다 (반 배정/이동/취소는 여기서).
+function regStatusHeaderHtml(){
+  const month = STATE.regStatusMonth || (new Date().getMonth()+1);
+  const coachFilter = STATE.regStatusCoach || 'all';
+  const coaches = activeCoaches();
+  return `<div style="padding:14px 18px 10px 18px;border-top:1px solid #f1f5f9;background:#fff;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:10px;">회원등록현황</div>
+    <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;">
       ${[...Array(12)].map((_,i)=>{ const m=i+1; return `<div class="chip-select ${month===m?'on':''}" style="flex-shrink:0;" onclick="setRegStatusMonth(${m})">${m}월</div>`; }).join('')}
     </div>
     <div style="display:flex;gap:6px;margin-top:8px;overflow-x:auto;">
       <div class="chip-select ${coachFilter==='all'?'on':''}" style="${coachFilter==='all'?'':'background:#eef0ff;color:#4338ca;'}" onclick="setRegStatusCoach('all')">전체</div>
       ${coaches.map(c=>`<div class="chip-select ${coachFilter===c.id?'on':''}" style="${coachFilter===c.id?'':`background:${coachColor(c.id)};color:${coachTextColor(c.id)};`}" onclick="setRegStatusCoach('${c.id}')">${c.name}</div>`).join('')}
-    </div>`;
-  }
-  html += `</div>`;
-  return html;
+    </div>
+  </div>`;
 }
 function membersView(){
-  if ((STATE.membersTab||'list')==='status') return memberRegistrationStatusView();
   return `<div id="membersListBox" style="padding:14px 18px;">${membersListHtml()}</div>`;
 }
 // 정규수업 템플릿(class_templates, 반복 반)을 반 단위로 모아, 그 반에 실제 등록된 회원(member_slots)을 함께 반환한다.
@@ -2416,45 +2403,16 @@ async function cancelMemberSlot(slotId){
 // 입력 중이던 한글 조합이 끊겨서 자모가 풀어져 나오는 문제가 있었다(예: 백정미 → ㅂㅐㄱㅈㅓㅇㅁㅣ)
 function membersListHtml(){
   const q = STATE.memberQuery || '';
-  const filter = STATE.memberFilter || 'all';
-  const coachFilter = STATE.memberCoachFilter || 'all';
   const list = STATE.members.filter(m=> m.name.includes(q));
-  const thisMonth = ym(fromISO(STATE.today));
   let html = '';
   list.forEach(m=>{
-    const slots = slotsOfMember(m.id);
-    const slot = slots[0];
-    const hasPkg = memberHasPackage(m.id);
-    if (filter==='monthly' && slots.length===0) return;
-    if (filter==='package' && !hasPkg) return;
-    if (coachFilter!=='all') {
-      const disp0 = hasPkg ? getPackageDisplay(m.id) : null;
-      const teachesMember = slots.some(sl=>sl.coachId===coachFilter) || (disp0 && disp0.coachId===coachFilter);
-      if (!teachesMember) return;
-    }
     const initial = m.name[0];
-    let sub, pill;
-    if (slot) {
-      const coach = staffById(slot.coachId), product = productById(slot.productId);
-      sub = `${coach?coach.name:'-'} 코치 · ${WD[slot.weekday]} ${slot.time} · ${product?product.name.split(' ')[0]:''}`;
-      if (slots.length>1) sub += ` 외 ${slots.length-1}건`;
-      const paidCount = slots.filter(sl=>getSlotPaidStatus(sl.id, thisMonth)).length;
-      if (paidCount===slots.length) pill = {t:'등록완료',bg:'#f0fdf4',c:'#15803d'};
-      else if (paidCount===0) pill = {t:'미등록',bg:'#fef2f2',c:'#b91c1c'};
-      else pill = {t:`일부미등록(${paidCount}/${slots.length})`,bg:'#fffbeb',c:'#b45309'};
-    } else if (hasPkg) {
-      const disp = getPackageDisplay(m.id);
-      const coach = staffById(disp.coachId);
-      sub = `${coach?coach.name:'-'} 코치 · 개인레슨 · 잔여 ${disp.remaining}회`;
-      pill = {t:'진행중',bg:'#f0fdfa',c:'#0f766e'};
-    } else { sub=''; pill={t:'-',bg:'#f1f5f9',c:'#64748b'}; }
-    html += `<div class="m-card" style="display:flex;align-items:center;gap:12px;cursor:pointer;" onclick="openMemberSheet('${m.id}')">
+    html += `<div class="m-card" style="display:flex;align-items:center;gap:12px;cursor:pointer;" onclick="openMemberProfileSheet('${m.id}')">
       <div style="width:38px;height:38px;border-radius:50%;background:#4f46e5;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;">${initial}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-size:14px;font-weight:700;">${m.name}<span style="font-size:11px;color:#94a3b8;font-weight:600;margin-left:6px;">${m.phone||'-'}</span></div>
-        <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${sub}</div>
+        ${m.memo ? `<div style="font-size:11px;color:#b45309;font-weight:600;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${m.memo}</div>` : ''}
       </div>
-      <span class="avail-pill" style="background:${pill.bg};color:${pill.c};">${pill.t}</span>
     </div>`;
   });
   return html;
@@ -2464,8 +2422,44 @@ function setMemberQuery(el){
   const box = document.getElementById('membersListBox');
   if (box) box.innerHTML = membersListHtml();
 }
-function setMemberFilter(f){ STATE.memberFilter = f; render(); }
-function setMemberCoachFilter(c){ STATE.memberCoachFilter = c; render(); }
+// 회원명단에서 회원을 눌렀을 때 — 코치/반 정보 없이 순수 회원 정보(가입월, 전체 출석/결석)만 보여준다.
+// "어느 반인지"는 회원등록현황(openMemberSheet)에서 다룬다.
+function openMemberProfileSheet(memberId){
+  const m = memberById(memberId);
+  if (!m) return;
+  const all = STATE.sessions.filter(s=>s.memberId===memberId);
+  const attended = all.filter(s=>s.status==='attended').length;
+  const absent = all.filter(s=>s.status==='absent').length;
+  const joined = m.createdAt ? m.createdAt.slice(0,7).replace('-','년 ')+'월' : '-';
+  let html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 4px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+    <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+      <div style="width:48px;height:48px;border-radius:50%;background:#4f46e5;color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;flex-shrink:0;">${m.name[0]}</div>
+      <div style="min-width:0;">
+        <div style="font-size:17px;font-weight:800;">${m.name}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:3px;">${ICONS.phone}<span style="font-size:12px;color:#64748b;font-weight:600;">${m.phone||'-'}</span></div>
+      </div>
+    </div>
+    ${isOwner() ? `<span style="font-size:11px;color:#b91c1c;font-weight:700;cursor:pointer;flex-shrink:0;" onclick="deleteMemberConfirm('${memberId}','${m.name}')">회원 삭제</span>` : ''}
+  </div>
+  <div style="padding:14px 20px 20px 20px;">
+    <div style="font-size:11px;color:#94a3b8;font-weight:700;margin-bottom:12px;">${joined} 가입</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+      <div class="stat-tile"><div style="font-size:16px;font-weight:800;">${all.length}</div><div style="font-size:10px;color:#94a3b8;font-weight:700;margin-top:2px;">총 수업</div></div>
+      <div class="stat-tile"><div style="font-size:16px;font-weight:800;color:#15803d;">${attended}</div><div style="font-size:10px;color:#94a3b8;font-weight:700;margin-top:2px;">출석</div></div>
+      <div class="stat-tile"><div style="font-size:16px;font-weight:800;color:#b91c1c;">${absent}</div><div style="font-size:10px;color:#94a3b8;font-weight:700;margin-top:2px;">결석</div></div>
+    </div>
+    ${m.memo ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:12px 14px;margin-top:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-size:11px;font-weight:800;color:#b45309;">특이사항 메모</span>
+        ${isOwner() ? `<span style="font-size:11px;font-weight:700;color:#b45309;cursor:pointer;text-decoration:underline;" onclick="openEditMemberMemo('${memberId}')">수정</span>` : ''}
+      </div>
+      <div style="font-size:13px;color:#78350f;font-weight:500;">${m.memo}</div>
+    </div>` : (isOwner() ? `<div style="margin-top:14px;"><div class="btn-secondary" onclick="openEditMemberMemo('${memberId}')">+ 특이사항 메모 추가</div></div>` : '')}
+    ${isOwner() ? `<div style="margin-top:16px;"><div class="btn-secondary" onclick="openMemberFullHistory('${memberId}')">전체 수강 이력 보기</div></div>` : ''}
+  </div>`;
+  openModal(html);
+}
 
 /* ---------- 4) 결제관리 (관리자 전용) ---------- */
 function paymentsView(){
