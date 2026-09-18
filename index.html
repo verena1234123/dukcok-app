@@ -137,6 +137,8 @@ function templateForCell(courtId, t, weekday, dateISO){
   return STATE.classTemplates.find(x=>x.courtId===courtId && templateHours(x).includes(t) &&
     (x.specificDate ? x.specificDate===dateISO : x.weekday===weekday));
 }
+// 수업관리 목록(요일별)에서는 1회성(개인레슨/기타) 수업도 그 날짜가 속한 요일 탭에 함께 보여준다.
+function templateWeekdayFor(t){ return t.specificDate ? fromISO(t.specificDate).getDay() : t.weekday; }
 function hourPlusOne(t){ const h = parseInt(t.slice(0,2)); return String(h+1).padStart(2,'0')+':00'; }
 function hourMinusOne(t){ const h = parseInt(t.slice(0,2)); return String(Math.max(h-1,0)).padStart(2,'0')+':00'; }
 // 같은 상품을 이미 듣고 있는 회원이 하나 더(주2회 등) 등록할 때, 두 슬롯 모두 정가로 기록하고
@@ -1036,7 +1038,6 @@ function fabHtml(){
 function viewHtml(){
   switch(STATE.tab){
     case 'timetable':
-      if (STATE.timetableMode==='add') return addClassView();
       if (STATE.timetableMode==='makeup') return makeupListView();
       return timetableView();
     case 'availability': return availabilityView();
@@ -1058,12 +1059,11 @@ function timetableHeaderHtml(){
   const mode = STATE.timetableMode || 'view';
   let html = `<div style="padding:10px 18px 0 18px;border-top:1px solid #f1f5f9;">
     <div style="display:flex;gap:6px;">
-      <div class="chip-select ${mode==='view'?'on':''}" onclick="setTimetableMode('view')">시간표 보기</div>
-      <div class="chip-select ${mode==='add'?'on':''}" onclick="setTimetableMode('add')">수업 추가</div>
+      <div class="chip-select ${mode==='view'?'on':''}" onclick="setTimetableMode('view')">시간표</div>
       <div class="chip-select ${mode==='makeup'?'on':''}" onclick="setTimetableMode('makeup')">보강자명단</div>
     </div>
   </div>`;
-  if (mode==='view' || mode==='add') {
+  if (mode==='view') {
     html += `<div style="padding:10px 18px 12px 18px;">
       <div style="display:flex;align-items:center;justify-content:center;gap:12px;">
         <span onclick="shiftWeek(-1)" style="cursor:pointer;">${ICONS.chevL}</span>
@@ -1144,6 +1144,7 @@ function courtHourLinkKey(groups, courtId, t){
 }function timetableView(){
   const selected = STATE.selectedDate || STATE.today;
   const daySessions = sessionsOnDate(selected);
+  const weekday = fromISO(selected).getDay();
 
   const groups = {};
   const seen = new Set();
@@ -1164,38 +1165,40 @@ function courtHourLinkKey(groups, courtId, t){
   const warnCount = conflicts.length;
 
   let html = `<div style="padding:14px 18px 16px 18px;">
-    <div style="font-size:14px;font-weight:800;margin-bottom:8px;">${selected.slice(5).replace('-','월 ')}일(${WD[fromISO(selected).getDay()]}) · ${daySessions.filter(s=>s.status!=='cancelled').length}수업</div>`;
+    <div style="font-size:14px;font-weight:800;margin-bottom:8px;">${selected.slice(5).replace('-','월 ')}일(${WD[weekday]}) · ${daySessions.filter(s=>s.status!=='cancelled').length}수업</div>`;
 
   if (warnCount>0) {
     html += `<div style="display:flex;align-items:center;gap:6px;background:#fef2f2;border:1px solid #fecaca;padding:7px 10px;border-radius:8px;margin-bottom:12px;color:#b91c1c;cursor:pointer;" onclick="openConflictDetail('${selected}')">
       <span style="display:flex;">${ICONS.warn}</span><span style="font-size:12px;font-weight:700;">경고 ${warnCount}건 — 코트 중복배정/정원초과 확인 (눌러서 수정)</span></div>`;
   }
 
-  // 운영시간이 새벽~밤까지 넓어서, 그날 실제 수업이 있는 시간대만 표시한다 (없으면 안내 문구)
-  // 수업추가 탭에서 정규 운영시간 밖(예: 05시)에 새로 넣은 수업도 여기 보여야 하므로, OPERATING_HOURS 안쪽만
-  // 보지 않고 그날 실제로 잡힌 세션의 시작시간도 함께 모은다.
+  html += `<div style="margin-bottom:10px;"><span style="color:#4f46e5;font-size:12px;font-weight:800;cursor:pointer;" onclick="openAddExtraHourPicker()">+ 시간 추가</span></div>`;
+
+  // 운영시간이 새벽~밤까지 넓어서, 실제 수업/템플릿이 있는 시간대만 표시한다 (없으면 안내 문구)
   const sessionHours = [...new Set(daySessions.map(s=>s.startTime))];
-  const activeHours = [...new Set([...OPERATING_HOURS.filter(t=>STATE.courts.some(c=>(groups[t+'|'+c.id]||[]).length>0)), ...sessionHours])].sort();
-  if (activeHours.length===0) {
+  const activeHours = OPERATING_HOURS.filter(t=>STATE.courts.some(c=>(groups[t+'|'+c.id]||[]).length>0));
+  const templateHoursToday = OPERATING_HOURS.filter(t=>STATE.classTemplates.some(tp=>(tp.specificDate?tp.specificDate===selected:tp.weekday===weekday) && templateHours(tp).includes(t)));
+  const manualExtra = [...((STATE._addClassExtraHours && STATE._addClassExtraHours[selected]) || [])];
+  const hours = [...new Set([...activeHours, ...templateHoursToday, ...manualExtra, ...sessionHours])].sort();
+  if (hours.length===0) {
     html += `<div style="text-align:center;padding:40px 0;color:#94a3b8;font-size:13px;">이 날짜엔 등록된 수업이 없습니다.</div>`;
   }
-  activeHours.forEach(t=>{
+  hours.forEach(t=>{
     html += `<div style="font-size:12px;font-weight:700;color:#0f172a;margin:14px 0 6px 0;">${t}</div>
     <div style="display:grid;grid-template-columns:repeat(${STATE.courts.length},1fr);gap:6px;align-items:stretch;">`;
-    const weekday = fromISO(selected).getDay();
     STATE.courts.forEach(court=>{
       const key = t+'|'+court.id;
       const list = groups[key] || [];
       list.forEach(s=>seen.add(s.id));
       const warn = courtTimeWarn[key];
-      const product = list[0] ? productForSession(list[0]) : null;
-      const tpl = list.length===0 ? templateForCell(court.id, t, weekday, selected) : null;
+      const tpl = templateForCell(court.id, t, weekday, selected);
       const isOtherTpl = tpl && tpl.classType==='other';
       const isPersonalTpl = tpl && tpl.classType==='personal';
+      const product = list[0] ? productForSession(list[0]) : (tpl && tpl.classType==='regular' ? productById(tpl.productId) : null);
       const repCoachId = list[0] ? list[0].coachId : (tpl ? tpl.coachId : null);
       const cap = isOtherTpl ? (tpl.customCapacity||1) : effectiveCapacity(product, weekday, court.id, repCoachId, t);
       const overCap = !!(cap!=null && list.length>cap) && !(list.length>0 && list.every(s=>s.capacityOverride));
-      const classLabel = list[0] ? list[0].classLabel : (isOtherTpl ? '기타' : (isPersonalTpl ? '1:1 개인레슨' : null));
+      const classLabel = list[0] ? list[0].classLabel : (isPersonalTpl ? '1:1 개인레슨' : null);
       const linkKey = courtHourLinkKey(groups, court.id, t);
       const linkedPrev = linkKey!=null && courtHourLinkKey(groups, court.id, hourMinusOne(t))===linkKey;
       const linkedNext = linkKey!=null && courtHourLinkKey(groups, court.id, hourPlusOne(t))===linkKey;
@@ -1214,7 +1217,7 @@ function courtHourLinkKey(groups, courtId, t){
         <div style="min-width:0;overflow:hidden;font-size:11px;font-weight:800;white-space:nowrap;text-overflow:ellipsis;padding:2px 0 2px 7px;${repCoachId?`color:${coachTextColor(repCoachId)};`:'color:#0f172a;'}">${classLabel?classLabel+' · ':''}${court.name}${repCoachId?' · '+staffById(repCoachId).name:''}</div>
         <span style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
           ${(linkedNext && !linkedPrev) ? `<span class="cap-badge" style="font-size:9px;padding:2px 6px;background:#eef0ff;color:#4338ca;">${runHours}시간</span>` : ''}
-          ${list.length>0 ? `<span class="cap-badge ${overCap?'cap-warn':''}" style="font-size:9px;padding:2px 7px;${repCoachId && !overCap ? `background:transparent;color:${coachTextColor(repCoachId)};` : ''}">${list.length}${cap!=null?'/'+cap:''}</span>` : ''}
+          ${(list.length>0||isOtherTpl) ? `<span class="cap-badge ${overCap?'cap-warn':''}" style="font-size:9px;padding:2px 7px;${repCoachId && !overCap ? `background:transparent;color:${coachTextColor(repCoachId)};` : ''}">${list.length}${cap!=null?'/'+cap:''}</span>` : ''}
         </span>
       </div>`;
       if (linkedPrev) {
@@ -1234,6 +1237,9 @@ function courtHourLinkKey(groups, courtId, t){
           </div>`;
         });
       }
+      html += `<div style="display:flex;justify-content:center;margin-top:6px;">
+        <div style="width:22px;height:22px;border-radius:50%;background:#eef0ff;color:#4f46e5;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;cursor:pointer;line-height:1;" onclick="openCellActionMenu('${selected}',${weekday},'${t}','${court.id}')">+</div>
+      </div>`;
       if (linkedNext) {
         html += `<div style="margin-top:6px;padding-top:5px;border-top:1px dashed #c7d2fe;font-size:9px;color:#4338ca;font-weight:800;text-align:center;">↓ ${hourPlusOne(t)}까지 이어짐</div>`;
       }
@@ -1328,7 +1334,7 @@ function renderMonthPicker(){
   openModal(html);
 }
 
-/* ---------- 1b) 수업 추가 (보강/개인레슨 배정 전용 — 시간표는 보기 전용으로 분리) ---------- */
+/* ---------- 1b) 보강자명단 ---------- */
 // 결석 처리는 됐지만 아직 보강이 안 잡힌 회원들을 모아 보여주고, 여기서 바로 보강을 배정한다
 function setMakeupCoachFilter(c){ STATE.makeupCoachFilter = c; render(); }
 function makeupListView(){
@@ -1364,94 +1370,39 @@ function makeupListView(){
   html += `</div>`;
   return html;
 }
-function addClassView(){
-  const selected = STATE.selectedDate || STATE.today;
-  const daySessions = sessionsOnDate(selected);
-  const weekday = fromISO(selected).getDay();
+// 코트/시간 칸을 눌렀을 때 그 자리 상태에 맞는 작업만 골라 보여준다 (회원 추가/보강 배정/레슨 추가/수업 추가/반 취소 등)
+function openCellActionMenu(dateISO, weekday, time, courtId){
+  const list = sessionsOnDate(dateISO).filter(s=>s.startTime===time && (s.courtId||'_none')===courtId && s.status!=='cancelled');
+  const tpl = templateForCell(courtId, time, weekday, dateISO);
+  const isOtherTpl = tpl && tpl.classType==='other';
+  const isPersonalTpl = tpl && tpl.classType==='personal';
+  const product = list[0] ? productForSession(list[0]) : (tpl && tpl.classType==='regular' ? productById(tpl.productId) : null);
+  const repCoachId = list[0] ? list[0].coachId : (tpl ? tpl.coachId : null);
+  const cap = isOtherTpl ? (tpl.customCapacity||1) : effectiveCapacity(product, weekday, courtId, repCoachId, time);
+  const activeCount = list.filter(s=>s.status!=='absent').length;
+  const groupId = list[0] ? list[0].groupId : null;
+  const court = courtById(courtId);
 
-  const groups = {};
-  daySessions.forEach(s=>{
-    const key = s.startTime+'|'+(s.courtId||'_none');
-    groups[key] = groups[key] || [];
-    groups[key].push(s);
-  });
+  const actions = [];
+  if (isOtherTpl) {
+    if (list.length < cap) actions.push({label:'회원 추가', danger:false, fn:`openJoinOtherClassPicker('${dateISO}','${time}','${courtId}','${tpl.id}')`});
+    if (isOwner() && list.length===0) actions.push({label:'이 반 취소', danger:true, fn:`deleteClassTemplate('${tpl.id}')`});
+  } else {
+    const canFillMore = !isPersonalTpl && (list.length===0 || (cap!=null && activeCount < cap));
+    if (canFillMore) actions.push({label:'보강 회원 배정', danger:false, fn:`openFillSlotPicker('${dateISO}','${time}','${courtId}',${repCoachId?`'${repCoachId}'`:'null'})`});
+    if (list.length===0) actions.push({label:'레슨 추가', danger:false, fn:`openAddLessonChooser('${dateISO}',${weekday},'${time}','${courtId}',${repCoachId?`'${repCoachId}'`:'null'})`});
+    if (isOwner() && list.length===0) actions.push({label:'수업 추가', danger:false, fn:`openAddAdhocClassForm('${dateISO}','${time}','${courtId}')`});
+    if (isOwner() && groupId) actions.push({label:'이 반 취소', danger:true, fn:`cancelAdhocClass('${groupId}')`});
+  }
 
-  const sessionHours = [...new Set(daySessions.map(s=>s.startTime))];
-  const activeHours = OPERATING_HOURS.filter(t=>STATE.courts.some(c=>(groups[t+'|'+c.id]||[]).length>0));
-  const templateHoursToday = OPERATING_HOURS.filter(t=>STATE.classTemplates.some(tp=>(tp.specificDate?tp.specificDate===selected:tp.weekday===weekday) && templateHours(tp).includes(t)));
-  const manualExtra = [...((STATE._addClassExtraHours && STATE._addClassExtraHours[selected]) || [])];
-  let hours = [...new Set([...activeHours, ...templateHoursToday, ...manualExtra, ...sessionHours])].sort();
-
-  let html = `<div style="padding:14px 18px 6px 18px;">
-    <div style="font-size:14px;font-weight:800;margin-bottom:4px;">시간 추가</div>
-    <div style="font-size:11px;color:#94a3b8;font-weight:600;">${selected.slice(5).replace('-','월 ')}일(${WD[weekday]}) · 빈 칸에 보강·개인레슨을 배정하거나, 새 시간대를 열어서 정규수업을 넣을 수 있습니다${isOwner()?' · 코트가 비어있으면 "수업 추가"로 동료학습반 같은 특수 반도 만들 수 있습니다':''}</div>
+  const html = `<div class="sheet-handle"></div><div class="sheet-close" onclick="closeModal()">${ICONS.x}</div>
+  <div style="padding:6px 20px 20px 20px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px;">${WD[weekday]} ${time} · ${court?court.name:''}</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
+      ${actions.length===0 ? `<div style="font-size:13px;color:#94a3b8;padding:16px 0;text-align:center;">이 자리에서 가능한 작업이 없습니다.</div>` : actions.map(a=>`<div style="padding:12px 14px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;font-size:14px;font-weight:700;cursor:pointer;${a.danger?'color:#b91c1c;':'color:#0f172a;'}" onclick="closeModal();${a.fn}">${a.label}</div>`).join('')}
+    </div>
   </div>`;
-
-  html += `<div style="padding:0 18px 10px 18px;">
-    <span style="color:#4f46e5;font-size:12px;font-weight:800;cursor:pointer;" onclick="openAddExtraHourPicker()">+ 시간 추가</span>
-  </div>`;
-
-  hours.forEach(t=>{
-    html += `<div style="padding:0 18px;">
-      <div style="font-size:12px;font-weight:700;color:#0f172a;margin:10px 0 6px 0;">${t}</div>
-      <div style="display:grid;grid-template-columns:repeat(${STATE.courts.length},1fr);gap:6px;align-items:stretch;">`;
-    STATE.courts.forEach(court=>{
-      const key = t+'|'+court.id;
-      const list = groups[key] || [];
-      const tpl = templateForCell(court.id, t, weekday, selected);
-      const isOtherTpl = tpl && tpl.classType==='other';
-      const isPersonalTpl = tpl && tpl.classType==='personal';
-      const product = list[0] ? productForSession(list[0]) : (tpl && tpl.classType==='regular' ? productById(tpl.productId) : null);
-      const repCoachId = list[0] ? list[0].coachId : (tpl ? tpl.coachId : null);
-      const cap = isOtherTpl ? (tpl.customCapacity||1) : effectiveCapacity(product, weekday, court.id, repCoachId, t);
-      const activeCount = list.filter(s=>s.status!=='cancelled' && s.status!=='absent').length;
-      const canFillMore = !isOtherTpl && !isPersonalTpl && (list.length===0 || (cap!=null && activeCount < cap));
-      const classLabel = list[0] ? list[0].classLabel : (isOtherTpl ? '기타' : (isPersonalTpl ? '1:1 개인레슨' : null));
-      const groupId = list[0] ? list[0].groupId : null;
-      const linkKey = courtHourLinkKey(groups, court.id, t);
-      const linkedPrev = linkKey!=null && courtHourLinkKey(groups, court.id, hourMinusOne(t))===linkKey;
-      const linkedNext = linkKey!=null && courtHourLinkKey(groups, court.id, hourPlusOne(t))===linkKey;
-      html += `<div class="m-card" style="padding:8px;height:100%;box-sizing:border-box;margin-top:0;${(linkedPrev||linkedNext)?'border:2px solid #c7d2fe;background:#f5f6ff;':''}">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:4px;border-radius:6px;overflow:hidden;${repCoachId?`background:${coachColor(repCoachId)};`:''}">
-          <div style="min-width:0;overflow:hidden;font-size:11px;font-weight:800;white-space:nowrap;text-overflow:ellipsis;padding:2px 0 2px 7px;${repCoachId?`color:${coachTextColor(repCoachId)};`:'color:#0f172a;'}">${classLabel?classLabel+' · ':''}${court.name}${repCoachId?' · '+staffById(repCoachId).name:''}</div>
-          ${(list.length>0||isOtherTpl) ? `<span class="cap-badge" style="font-size:9px;padding:2px 7px;flex-shrink:0;${repCoachId?`background:transparent;color:${coachTextColor(repCoachId)};`:''}">${list.length}${cap!=null?'/'+cap:''}</span>` : ''}
-        </div>`;
-      if (linkedPrev) {
-        html += `<div style="font-size:9px;color:#4338ca;font-weight:800;margin-bottom:4px;">↑ ${hourMinusOne(t)}부터 이어지는 수업</div>`;
-      }
-      if (isOtherTpl) {
-        if (list.length < cap) {
-          html += `<div style="color:#7e22ce;font-size:10px;font-weight:800;cursor:pointer;margin-top:2px;" onclick="openJoinOtherClassPicker('${selected}','${t}','${court.id}','${tpl.id}')">+ 회원 추가</div>`;
-        } else {
-          html += `<div style="color:#cbd5e1;font-size:11px;font-weight:600;">정원 마감</div>`;
-        }
-        if (isOwner() && list.length===0) {
-          html += `<div style="color:#b91c1c;font-size:10px;font-weight:800;cursor:pointer;margin-top:4px;" onclick="deleteClassTemplate('${tpl.id}')">이 반 취소</div>`;
-        }
-      } else {
-        if (canFillMore) {
-          html += `<div style="color:#4f46e5;font-size:10px;font-weight:800;cursor:pointer;margin-top:2px;" onclick="openFillSlotPicker('${selected}','${t}','${court.id}',${repCoachId?`'${repCoachId}'`:'null'})">+ 보강 회원 배정</div>`;
-        } else {
-          html += `<div style="color:#cbd5e1;font-size:11px;font-weight:600;">정원 마감</div>`;
-        }
-        if (list.length===0) {
-          html += `<div style="color:#0369a1;font-size:10px;font-weight:800;cursor:pointer;margin-top:4px;" onclick="openAddLessonChooser('${selected}',${weekday},'${t}','${court.id}',${repCoachId?`'${repCoachId}'`:'null'})">+ 레슨 추가</div>`;
-        }
-        if (isOwner() && list.length===0) {
-          html += `<div style="color:#7e22ce;font-size:10px;font-weight:800;cursor:pointer;margin-top:4px;" onclick="openAddAdhocClassForm('${selected}','${t}','${court.id}')">+ 수업 추가</div>`;
-        }
-        if (isOwner() && groupId) {
-          html += `<div style="color:#b91c1c;font-size:10px;font-weight:800;cursor:pointer;margin-top:4px;" onclick="cancelAdhocClass('${groupId}')">이 반 취소</div>`;
-        }
-      }
-      if (linkedNext) {
-        html += `<div style="margin-top:6px;padding-top:5px;border-top:1px dashed #c7d2fe;font-size:9px;color:#4338ca;font-weight:800;text-align:center;">↓ ${hourPlusOne(t)}까지 이어짐</div>`;
-      }
-      html += `</div>`;
-    });
-    html += `</div></div>`;
-  });
-  return html;
+  openModal(html);
 }
 // 시간표에 원래 없던 시간대(이른 아침·늦은 밤 등)를 이 날짜에 한해 새로 열어서 정규수업/개인레슨을 배정할 수 있게 한다
 const EXTRA_HOUR_OPTIONS = ['04:00','05:00','06:00','07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00','23:00'];
@@ -2796,7 +2747,7 @@ function classTemplateManagerView(){
     </div>
     <div style="margin-bottom:8px;"><span style="color:#4f46e5;font-size:12px;font-weight:800;cursor:pointer;" onclick="openAddTemplateManagerHour()">+ 시간 추가</span></div>`;
 
-  const hoursWithTpl = OPERATING_HOURS.filter(t=>STATE.classTemplates.some(tp=>tp.weekday===weekday && templateHours(tp).includes(t)));
+  const hoursWithTpl = OPERATING_HOURS.filter(t=>STATE.classTemplates.some(tp=>templateWeekdayFor(tp)===weekday && templateHours(tp).includes(t)));
   const manualExtra = [...((STATE._templateManagerExtraHours && STATE._templateManagerExtraHours[weekday]) || [])];
   const hours = [...new Set([...hoursWithTpl, ...manualExtra])].sort();
 
@@ -2808,13 +2759,14 @@ function classTemplateManagerView(){
     html += `<div style="font-size:12px;font-weight:700;color:#0f172a;margin:10px 0 6px 0;">${t}</div>
     <div style="display:grid;grid-template-columns:repeat(${STATE.courts.length},1fr);gap:6px;margin-bottom:4px;">`;
     STATE.courts.forEach(court=>{
-      const tpl = STATE.classTemplates.find(x=>x.weekday===weekday && x.courtId===court.id && templateHours(x).includes(t));
+      const tpl = STATE.classTemplates.find(x=>templateWeekdayFor(x)===weekday && x.courtId===court.id && templateHours(x).includes(t));
       if (tpl) {
         const product = productById(tpl.productId);
         const coach = staffById(tpl.coachId);
+        const typeLabel = tpl.classType==='other' ? '기타' : (tpl.classType==='personal' ? '개인레슨' : (product?product.name.split(' ')[0]:'-'));
         html += `<div class="m-card" style="padding:8px;margin-top:0;cursor:pointer;${coach?`background:${coachColor(tpl.coachId)};`:''}" onclick="openEditTemplateForm('${tpl.id}')">
           <div style="font-size:11px;font-weight:800;${coach?`color:${coachTextColor(tpl.coachId)};`:''}">${court.name}${coach?' · '+coach.name:''}</div>
-          <div style="font-size:10px;font-weight:700;margin-top:2px;${coach?`color:${coachTextColor(tpl.coachId)};`:'color:#64748b;'}">${product?product.name.split(' ')[0]:'-'}${tpl.customCapacity?` · 정원 ${tpl.customCapacity}명`:''}</div>
+          <div style="font-size:10px;font-weight:700;margin-top:2px;${coach?`color:${coachTextColor(tpl.coachId)};`:'color:#64748b;'}">${typeLabel}${tpl.customCapacity?` · 정원 ${tpl.customCapacity}명`:''}${tpl.specificDate?` · ${tpl.specificDate.slice(5).replace('-','/')}`:''}</div>
           <div style="font-size:9px;margin-top:4px;">
             <span style="font-weight:800;cursor:pointer;${coach?`color:${coachTextColor(tpl.coachId)};`:'color:#4f46e5;'}" onclick="event.stopPropagation();openEditTemplateForm('${tpl.id}')">수정</span>
             <span style="font-weight:800;cursor:pointer;margin-left:10px;color:#dc2626;" onclick="event.stopPropagation();deleteClassTemplate('${tpl.id}')">삭제</span>
@@ -2875,11 +2827,7 @@ function renderAddTemplateForm(){
     <select onchange="newTemplateField('courtId', this.value)">${STATE.courts.map(c=>`<option value="${c.id}" ${c.id===t.courtId?'selected':''}>${c.name}</option>`).join('')}</select>
     ${isRegular ? `
     <div class="field-label" style="margin-top:12px;">수강상품</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;">${products.map(p=>`<div class="chip-select ${t.productId===p.id?'on':''}" onclick="newTemplateField('productId','${p.id}')">${p.name}</div>`).join('')}<div class="chip-select ${!t.productId?'on':''}" onclick="newTemplateField('productId', null)">기타</div></div>
-    ${!t.productId ? `
-    <div class="field-label" style="margin-top:12px;">인원</div>
-    <input type="text" inputmode="numeric" value="${t.customCapacity||''}" oninput="STATE._newTemplate.customCapacity=this.value" placeholder="예: 7" />
-    ` : ''}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${products.map(p=>`<div class="chip-select ${t.productId===p.id?'on':''}" onclick="newTemplateField('productId','${p.id}')">${p.name}</div>`).join('')}</div>
     ` : t.classType==='other' ? `
     <div class="field-label" style="margin-top:12px;">인원</div>
     <input type="text" inputmode="numeric" value="${t.customCapacity||''}" oninput="STATE._newTemplate.customCapacity=this.value" placeholder="예: 7" />
@@ -2896,7 +2844,7 @@ async function submitAddTemplate(){
   if (t.startTime >= t.endTime) { toast('종료 시간이 시작 시간보다 늦어야 합니다'); return; }
   if (!isRegular && !t.specificDate) { toast('날짜를 선택하세요'); return; }
   const customCapacity = t.customCapacity ? parseInt(t.customCapacity)||null : null;
-  if (isRegular && !t.productId && !customCapacity) { toast('상품을 선택하거나 인원을 입력하세요'); return; }
+  if (isRegular && !t.productId) { toast('상품을 선택하세요'); return; }
   if (t.classType==='other' && !customCapacity) { toast('인원을 입력하세요'); return; }
   const hours = templateHours(t);
   const newWeekday = isRegular ? t.weekday : fromISO(t.specificDate).getDay();
@@ -2916,7 +2864,7 @@ async function submitAddTemplate(){
     weekday: isRegular ? t.weekday : null,
     start_time:t.startTime, end_time:t.endTime, court_id:t.courtId,
     product_id: isRegular ? (t.productId||null) : null,
-    custom_capacity: customCapacity,
+    custom_capacity: isRegular ? null : customCapacity,
     class_type: t.classType,
     specific_date: isRegular ? null : t.specificDate
   };
