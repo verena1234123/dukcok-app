@@ -2325,28 +2325,37 @@ function regStatusCoachListHtml(coachId, yearMonth){
 }
 // "전체"를 골랐을 때 — 요일×코트를 가로로 이어붙인 격자. 칸이 좁아 코치 이니셜+인원만 보여주고,
 // 눌러야 그 칸의 회원 명단(추가/취소)이 나오는 상세 시트를 연다.
+// "전체"를 골랐을 때 — 코치별로 세로 구간을 나누고, 그 안에서 조밀한(3열) 카드 그리드로 보여준다.
+// 코치 이름을 구간 제목으로 한 번만 보여주므로 카드 자체는 요일/시간/코트/인원만 담아 작게 만들 수 있다.
 function regStatusAllGridHtml(yearMonth){
   const courts = STATE.courts;
-  const items = [];
+  const coaches = activeCoaches();
+  const byCoach = {};
+  coaches.forEach(c=>{ byCoach[c.id] = []; });
   REGSTATUS_WEEKDAYS.forEach(wd=>{
     OPERATING_HOURS.forEach(h=>{
       courts.forEach(court=>{
         const cell = regStatusCell(wd, h, court.id);
-        if (cell) items.push({ wd, h, court, cell });
+        if (cell && byCoach[cell.tpl.coachId]) byCoach[cell.tpl.coachId].push({ wd, h, court, cell });
       });
     });
   });
-  if (items.length===0) return `<div style="text-align:center;padding:40px 0;color:#94a3b8;font-size:13px;">배정된 정규수업이 없습니다.</div>`;
-  const cards = items.map(({wd, h, court, cell})=>{
-    const coach = staffById(cell.tpl.coachId);
-    const txt = coachTextColor(cell.tpl.coachId);
-    return `<div style="border-radius:14px;padding:10px;cursor:pointer;background:${coachColor(cell.tpl.coachId)};" onclick="openRegStatusCellDetail(${wd},'${h}','${court.id}')">
-      <div style="font-size:10px;font-weight:700;color:${txt};opacity:0.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${WD[wd]} ${h} · ${court.name}</div>
-      <div style="font-size:15px;font-weight:800;color:${txt};margin-top:4px;">${coach?coach.name:'-'}</div>
-      <div style="font-size:13px;font-weight:700;color:${txt};margin-top:2px;">${cell.members.length}${cell.cap!=null?'/'+cell.cap:''}</div>
+  const sections = coaches.filter(c=>byCoach[c.id].length>0);
+  if (sections.length===0) return `<div style="text-align:center;padding:40px 0;color:#94a3b8;font-size:13px;">배정된 정규수업이 없습니다.</div>`;
+  return sections.map(c=>{
+    const txt = coachTextColor(c.id);
+    const cards = byCoach[c.id].map(({wd, h, court, cell})=>{
+      return `<div style="border-radius:10px;padding:7px;cursor:pointer;background:${coachColor(c.id)};" onclick="openRegStatusCellDetail(${wd},'${h}','${court.id}')">
+        <div style="font-size:10px;font-weight:800;color:${txt};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${WD[wd]} ${h}</div>
+        <div style="font-size:9px;font-weight:700;color:${txt};opacity:0.75;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${court.name}</div>
+        <div style="font-size:10px;font-weight:700;color:${txt};margin-top:3px;">${cell.members.length}${cell.cap!=null?'/'+cell.cap:''}</div>
+      </div>`;
+    }).join('');
+    return `<div style="margin-bottom:16px;">
+      <div style="font-size:13px;font-weight:800;color:#0f172a;margin-bottom:8px;">${c.name} 코치</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">${cards}</div>
     </div>`;
   }).join('');
-  return `<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">${cards}</div>`;
 }
 function openRegStatusCellDetail(weekday, time, courtId){
   const yearMonth = STATE.regStatusMonth || ym(fromISO(STATE.today));
