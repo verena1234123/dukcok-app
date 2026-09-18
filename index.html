@@ -1126,12 +1126,18 @@ function conflictsForDate(dateISO){
   return result;
 }
 
-// 같은 코트에서 같은 코치가 바로 앞/뒤 시간에도 이어지는지 확인한다 — 화요일 12~14시 이동선 코치
-// 반처럼 여러 시간에 걸친 하나의 수업을, 시간표에서 서로 이어진 것처럼 테두리로 연결해 보여주기 위함
-// (돈을 더 내고 2시간을 듣는 회원과, 1시간만 듣는 회원이 한 반에 섞여 있는 경우를 시각적으로 구분).
-function courtHourActiveCoach(groups, courtId, t){
+// 시간표에서 "여러 시간에 걸친 하나의 수업"을 테두리로 이어 보여줄지 판정한다.
+// 단순히 "같은 코치가 바로 앞/뒤 시간에도 있다"로 묶으면, 코치가 다음 시간에 완전히 별개인
+// 수업을 하는 경우까지 잘못 이어져 보이므로 쓰지 않는다. 대신 실제로 "같은 반"임을 나타내는
+// 신호만 사용한다 — (1) 관리자가 만든 특수 반(수업추가로 만든 group_id로 묶인 세션들),
+// (2) 강제 정원초과(capacityOverride) 배정 — 이동선 코치 1:2반(정원 2명)처럼, 한 명이 추가
+// 비용을 내고 여러 시간을 나눠 듣는 특수 케이스. 둘 다 아니면 이어붙이지 않는다.
+function courtHourLinkKey(groups, courtId, t){
   const list = (groups[t+'|'+courtId]||[]).filter(s=>s.status!=='cancelled');
-  return list.length ? list[0].coachId : null;
+  if (!list.length) return null;
+  if (list[0].groupId) return 'group:'+list[0].groupId;
+  if (list.every(s=>s.capacityOverride)) return 'override:'+list[0].coachId;
+  return null;
 }function timetableView(){
   const selected = STATE.selectedDate || STATE.today;
   const daySessions = sessionsOnDate(selected);
@@ -1185,12 +1191,13 @@ function courtHourActiveCoach(groups, courtId, t){
       const cap = effectiveCapacity(product, weekday, court.id, repCoachId, t);
       const overCap = !!(cap!=null && list.length>cap) && !(list.length>0 && list.every(s=>s.capacityOverride));
       const classLabel = list[0] ? list[0].classLabel : null;
-      const linkedPrev = list.length>0 && repCoachId && courtHourActiveCoach(groups, court.id, hourMinusOne(t))===repCoachId;
-      const linkedNext = list.length>0 && repCoachId && courtHourActiveCoach(groups, court.id, hourPlusOne(t))===repCoachId;
+      const linkKey = courtHourLinkKey(groups, court.id, t);
+      const linkedPrev = linkKey!=null && courtHourLinkKey(groups, court.id, hourMinusOne(t))===linkKey;
+      const linkedNext = linkKey!=null && courtHourLinkKey(groups, court.id, hourPlusOne(t))===linkKey;
       let runHours = 1;
       if (linkedNext && !linkedPrev) {
         let probe = hourPlusOne(t);
-        while (courtHourActiveCoach(groups, court.id, probe)===repCoachId) { runHours++; probe = hourPlusOne(probe); }
+        while (courtHourLinkKey(groups, court.id, probe)===linkKey) { runHours++; probe = hourPlusOne(probe); }
       }
       html += `<div class="m-card" style="padding:8px;height:100%;box-sizing:border-box;margin-top:0;${warn?'border-color:#fca5a5;background:#fffafa;':((linkedPrev||linkedNext)?'border:2px solid #c7d2fe;background:#f5f6ff;':'')}">`;
       if (warn) {
@@ -1394,8 +1401,9 @@ function addClassView(){
       const canFillMore = list.length===0 || (cap!=null && activeCount < cap);
       const classLabel = list[0] ? list[0].classLabel : null;
       const groupId = list[0] ? list[0].groupId : null;
-      const linkedPrev = list.length>0 && repCoachId && courtHourActiveCoach(groups, court.id, hourMinusOne(t))===repCoachId;
-      const linkedNext = list.length>0 && repCoachId && courtHourActiveCoach(groups, court.id, hourPlusOne(t))===repCoachId;
+      const linkKey = courtHourLinkKey(groups, court.id, t);
+      const linkedPrev = linkKey!=null && courtHourLinkKey(groups, court.id, hourMinusOne(t))===linkKey;
+      const linkedNext = linkKey!=null && courtHourLinkKey(groups, court.id, hourPlusOne(t))===linkKey;
       html += `<div class="m-card" style="padding:8px;height:100%;box-sizing:border-box;margin-top:0;${(linkedPrev||linkedNext)?'border:2px solid #c7d2fe;background:#f5f6ff;':''}">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:4px;border-radius:6px;overflow:hidden;${repCoachId?`background:${coachColor(repCoachId)};`:''}">
           <div style="min-width:0;overflow:hidden;font-size:11px;font-weight:800;white-space:nowrap;text-overflow:ellipsis;padding:2px 0 2px 7px;${repCoachId?`color:${coachTextColor(repCoachId)};`:'color:#0f172a;'}">${classLabel?classLabel+' · ':''}${court.name}${repCoachId?' · '+staffById(repCoachId).name:''}</div>
@@ -1449,7 +1457,7 @@ function confirmAddExtraHour(t){
 
 /* ---------- 1c) 관리자 전용 — 코트가 비어있으면 그 자리에서 바로 특수 반(동료학습반 등)을 만든다 ----------
    정규 상품/코트배정과 무관하게, 하루짜리로 시간(몇 시간이든)·인원(몇 명이든) 자유롭게 정해서 만든다.
-   같은 코치가 여러 시간에 걸쳐 이어지면 courtHourActiveCoach 덕분에 시간표에서 자동으로 테두리로 이어져 보인다. */
+   같은 group_id로 묶인 세션들은 courtHourLinkKey 덕분에 시간표에서 자동으로 테두리로 이어져 보인다. */
 function openAddAdhocClassForm(dateISO, startTime, courtId){
   if (!isOwner()) return;
   const coaches = activeCoaches();
