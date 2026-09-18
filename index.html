@@ -2271,52 +2271,55 @@ function regStatusCoachCell(coachId, weekday, time){
 function memberRegistrationStatusView(){
   const coachFilter = STATE.regStatusCoach || 'all';
   const yearMonth = STATE.regStatusMonth || ym(fromISO(STATE.today));
-  const body = coachFilter==='all' ? regStatusAllGridHtml(yearMonth) : regStatusCoachGridHtml(coachFilter, yearMonth);
+  if (coachFilter==='all') {
+    return `<div style="padding:14px 18px;">
+      <div class="btn-secondary" style="margin-bottom:12px;" onclick="openAddTemplateForm()">+ 반 개설</div>
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;">${regStatusAllGridHtml(yearMonth)}</div>
+    </div>`;
+  }
   return `<div style="padding:14px 18px;">
     <div class="btn-secondary" style="margin-bottom:12px;" onclick="openAddTemplateForm()">+ 반 개설</div>
-    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;">${body}</div>
+    ${regStatusCoachListHtml(coachFilter, yearMonth)}
   </div>`;
 }
-function regStatusMemberDotHtml(x, yearMonth){
-  const enr = STATE.enrollments.find(e=>e.slotId===x.slotId && e.yearMonth===yearMonth);
-  const paid = enr ? enr.paymentStatus==='paid' : null;
-  const dot = paid===true ? '#22c55e' : (paid===false ? '#ef4444' : '#cbd5e1');
-  return `<div style="display:flex;align-items:center;gap:3px;padding:2px 0;cursor:pointer;" onclick="event.stopPropagation();openMemberSheet('${x.member.id}')">
-    <span style="width:5px;height:5px;border-radius:50%;background:${dot};flex-shrink:0;"></span>
-    <span style="font-size:10px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${x.member.name}</span>
-  </div>`;
-}
-// 코치 한 명을 골랐을 때 — 7개 요일 컬럼, 그 코치가 실제로 수업하는 시간만 행으로 표시한다.
-function regStatusCoachGridHtml(coachId, yearMonth){
-  const cellsByHour = {};
-  OPERATING_HOURS.forEach(h=>{
-    const row = REGSTATUS_WEEKDAYS.map(wd=>regStatusCoachCell(coachId, wd, h));
-    if (row.some(c=>c)) cellsByHour[h] = row;
-  });
-  const hours = Object.keys(cellsByHour).sort();
-  if (hours.length===0) return `<div style="text-align:center;padding:40px 0;color:#94a3b8;font-size:13px;">배정된 정규수업이 없습니다.</div>`;
-  const colW = 104;
-  let html = `<div style="display:grid;grid-template-columns:40px repeat(7,${colW}px);gap:4px;min-width:${40+7*colW}px;">
-    <div></div>
-    ${REGSTATUS_WEEKDAYS.map(wd=>`<div style="text-align:center;font-size:11px;font-weight:800;color:#64748b;padding:4px 0;">${WD[wd]}</div>`).join('')}`;
-  hours.forEach(h=>{
-    html += `<div style="position:sticky;left:0;background:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#0f172a;">${h}</div>`;
-    cellsByHour[h].forEach((cell, idx)=>{
-      const wd = REGSTATUS_WEEKDAYS[idx];
-      if (!cell) { html += `<div style="border:1px dashed #f1f5f9;border-radius:8px;min-height:40px;"></div>`; return; }
-      const openCount = cell.cap!=null ? Math.max(0, cell.cap-cell.members.length) : 0;
-      html += `<div class="m-card" style="padding:6px;font-size:10px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:2px;margin-bottom:3px;">
-          <span style="font-weight:800;color:#64748b;">${cell.court?cell.court.name.replace('코트',''):''}</span>
-          <span class="cap-badge" style="font-size:9px;padding:1px 5px;">${cell.members.length}${cell.cap!=null?'/'+cell.cap:''}</span>
-        </div>
-        ${cell.members.map(x=>regStatusMemberDotHtml(x, yearMonth)).join('')}
-        ${openCount>0 ? `<div style="font-size:9px;color:#4f46e5;font-weight:700;cursor:pointer;padding:2px 0;" onclick="openAssignMemberToClass('${cell.tpl.id}',${wd},'${h}','${cell.tpl.courtId}')">+ 추가</div>` : ''}
-      </div>`;
+// 코치 한 명을 골랐을 때 — 빈 칸 없이, 그 코치가 실제로 배정된 (요일,시간) 수업만 카드로 나열한다.
+// 요일×시간 격자를 다 채우면 코치가 안 가르치는 칸이 대부분이라 빈칸투성이가 되므로, 실제 있는 것만 보여준다.
+function regStatusCoachListHtml(coachId, yearMonth){
+  const items = [];
+  REGSTATUS_WEEKDAYS.forEach(wd=>{
+    OPERATING_HOURS.forEach(h=>{
+      const cell = regStatusCoachCell(coachId, wd, h);
+      if (cell) items.push({ wd, h, cell });
     });
   });
-  html += `</div>`;
-  return html;
+  if (items.length===0) return `<div style="text-align:center;padding:40px 0;color:#94a3b8;font-size:13px;">배정된 정규수업이 없습니다.</div>`;
+  return items.map(({wd, h, cell})=>{
+    const { tpl, product, cap, members, court } = cell;
+    const openSlots = cap!=null ? Math.max(0, cap-members.length) : 0;
+    return `<div class="m-card" style="margin-bottom:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div>
+          <div style="font-size:13px;font-weight:800;">${WD[wd]} ${h}</div>
+          <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-top:2px;">${court?court.name:''}${product?' · '+product.name:''}</div>
+        </div>
+        <span class="cap-badge" style="font-size:11px;padding:4px 10px;flex-shrink:0;">${members.length}${cap!=null?'/'+cap:''}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        ${members.map(x=>{
+          const enr = STATE.enrollments.find(e=>e.slotId===x.slotId && e.yearMonth===yearMonth);
+          const paid = enr ? enr.paymentStatus==='paid' : null;
+          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid #f1f5f9;">
+            <span style="font-size:13px;font-weight:700;cursor:pointer;" onclick="openMemberSheet('${x.member.id}')">${x.member.name}</span>
+            <span style="display:flex;align-items:center;gap:8px;">
+              ${paid===true?`<span class="avail-pill" style="background:#f0fdf4;color:#15803d;">등록완료</span>`:(paid===false?`<span class="avail-pill" style="background:#fef2f2;color:#b91c1c;">미등록</span>`:'')}
+              <span style="font-size:11px;color:#b91c1c;font-weight:700;cursor:pointer;" onclick="confirmCancelMemberSlot('${x.slotId}')">삭제</span>
+            </span>
+          </div>`;
+        }).join('')}
+      </div>
+      ${openSlots>0 ? `<div style="color:#4f46e5;font-size:12px;font-weight:800;cursor:pointer;margin-top:8px;" onclick="openAssignMemberToClass('${tpl.id}',${wd},'${h}','${tpl.courtId}')">+ 회원 추가</div>` : ''}
+    </div>`;
+  }).join('');
 }
 // "전체"를 골랐을 때 — 요일×코트를 가로로 이어붙인 격자. 칸이 좁아 코치 이니셜+인원만 보여주고,
 // 눌러야 그 칸의 회원 명단(추가/취소)이 나오는 상세 시트를 연다.
